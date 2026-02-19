@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime
 import motor.motor_asyncio
 import os
@@ -37,14 +37,20 @@ class AttitudeItem(BaseModel):
     response: int = Field(..., ge=1, le=7, description="Response value (1-7 scale)")
 
 
+class OpinionStatementItem(BaseModel):
+    """Individual opinion statement response (6-point Likert scale)"""
+    statement_id: str = Field(..., description="Identifier for the opinion statement")
+    response: int = Field(..., ge=1, le=6, description="Response value (1-6 scale: completely disagree to completely agree)")
+
+
 class Demographics(BaseModel):
     """Demographics information"""
-    age: Optional[int] = Field(None, ge=18, description="Participant age")
-    gender: Optional[str] = Field(None, description="Gender identity")
-    education: Optional[str] = Field(None, description="Education level")
-    ethnicity: Optional[str] = Field(None, description="Ethnicity")
-    country: Optional[str] = Field(None, description="Country of residence")
-    other: Optional[Dict[str, Any]] = Field(None, description="Additional demographic fields")
+    age: Optional[int] = Field(None, ge=18, description="Participant age (input field)")
+    gender: Optional[str] = Field(None, description="Gender identity (5 options: 4 predefined + 1 self-describe option)")
+    gender_self_describe: Optional[str] = Field(None, description="Self-described gender (if 'self-describe' option was selected)")
+    education: Optional[str] = Field(None, description="Highest level of education (6 options)")
+    kids_in_school: Optional[str] = Field(None, description="Do you have kids in school? (3 options)")
+    political_belief: Optional[str] = Field(None, description="Political belief (6 options)")
 
 
 class Survey1Request(BaseModel):
@@ -55,15 +61,30 @@ class Survey1Request(BaseModel):
     
     topic_condition: str = Field(..., description="Topic condition: 'teams', 'plastic_ban', or 'pe_mandatory'")
     
+    # Opinion question (first question - 6 choices: completely agree to completely disagree)
+    opinion_question: Optional[int] = Field(None, ge=1, le=6, description="Opinion response (1-6 scale: completely agree to completely disagree)")
+    opinion_reason: Optional[str] = Field(None, description="Reason/explanation for the opinion response")
+    
+    # Opinion statements (7 statements with 6-point Likert scale each)
+    opinion_statements: List[OpinionStatementItem] = Field(..., min_items=7, max_items=7, description="7 opinion statements about the topic")
+    
+    # Feeling and importance questions (6-point scale each)
+    feeling_strength: Optional[int] = Field(None, ge=1, le=6, description="How strongly do you feel about the topic? (1=Not at all, 6=Very strongly)")
+    topic_importance_feeling: Optional[int] = Field(None, ge=1, le=6, description="How important is the topic to you? (1=Not at all, 6=Very important)")
+    
+    # Topic usage question (topic-dependent, e.g., "How do you use MS Teams?")
+    topic_usage: Optional[List[str]] = Field(None, description="How do you use the topic? (multiple choice, 6 options total with 1 self-describe option)")
+    topic_usage_self_describe: Optional[str] = Field(None, description="Self-described topic usage (if 'self-describe' option was selected)")
+    
+    # Topic behavior question (topic-dependent, e.g., "How often do you drink water in plastic bottles?")
+    topic_behavior: Optional[str] = Field(None, description="Topic-specific behavior question (3 options, e.g., frequency of plastic bottle usage)")
+    
     attitudes: List[AttitudeItem] = Field(..., min_items=8, max_items=8, description="8 attitude items")
     
-    belief_argument: Optional[str] = Field(None, description="Belief argument response")
-    
-    topic_importance: Optional[int] = Field(None, ge=1, le=7, description="Topic importance rating (1-7)")
-    
-    attitude_strength: Optional[int] = Field(None, ge=1, le=7, description="Attitude strength rating (1-7)")
-    
     demographics: Optional[Demographics] = Field(None, description="Demographics information")
+    
+    # End of survey optional comment
+    survey_comment: Optional[str] = Field(None, description="Optional comment at the end of the survey")
     
     survey_completion_time: Optional[datetime] = Field(None, description="Survey completion timestamp")
     ip_address: Optional[str] = Field(None, description="IP address of participant")
@@ -122,11 +143,17 @@ async def submit_survey1(survey_data: Survey1Request):
             "prolific_id": survey_data.prolific_id,
             "qualtrics_response_id": survey_data.qualtrics_response_id,
             "topic_condition": survey_data.topic_condition,
+            "opinion_question": survey_data.opinion_question,
+            "opinion_reason": survey_data.opinion_reason,
+            "opinion_statements": [{"statement_id": item.statement_id, "response": item.response} for item in survey_data.opinion_statements],
+            "feeling_strength": survey_data.feeling_strength,
+            "topic_importance_feeling": survey_data.topic_importance_feeling,
+            "topic_usage": survey_data.topic_usage,
+            "topic_usage_self_describe": survey_data.topic_usage_self_describe,
+            "topic_behavior": survey_data.topic_behavior,
             "attitudes": [{"item_id": item.item_id, "response": item.response} for item in survey_data.attitudes],
-            "belief_argument": survey_data.belief_argument,
-            "topic_importance": survey_data.topic_importance,
-            "attitude_strength": survey_data.attitude_strength,
             "demographics": survey_data.demographics.dict() if survey_data.demographics else None,
+            "survey_comment": survey_data.survey_comment,
             "survey_completion_time": survey_data.survey_completion_time or datetime.utcnow(),
             "ip_address": survey_data.ip_address,
             "user_agent": survey_data.user_agent,
