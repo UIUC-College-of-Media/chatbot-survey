@@ -26,9 +26,25 @@ app.add_middleware(
 MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
 DATABASE_NAME = os.getenv("DATABASE_NAME", "persuasive_ai_study")
 
-client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
-db = client[DATABASE_NAME]
-survey1_collection = db["survey1_responses"]
+_client = None
+_db = None
+_survey1_collection = None
+
+def get_database():
+    """Get database connection, reusing existing connection for serverless"""
+    global _client, _db, _survey1_collection
+    
+    if _client is None:
+        _client = motor.motor_asyncio.AsyncIOMotorClient(
+            MONGODB_URL,
+            maxPoolSize=10,  
+            minPoolSize=1,   
+            serverSelectionTimeoutMS=5000  
+        )
+        _db = _client[DATABASE_NAME]
+        _survey1_collection = _db["survey1_responses"]
+    
+    return _client, _db, _survey1_collection
 
 
 class AttitudeItem(BaseModel):
@@ -117,6 +133,7 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     try:
+        client, db, survey1_collection = get_database()
         await client.admin.command('ping')
         return {
             "status": "healthy",
@@ -138,6 +155,8 @@ async def submit_survey1(survey_data: Survey1Request):
     This endpoint receives responses from Qualtrics survey and stores them in MongoDB.
     """
     try:
+        client, db, survey1_collection = get_database()
+        
         document = {
             "participant_id": survey_data.participant_id,
             "prolific_id": survey_data.prolific_id,
