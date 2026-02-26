@@ -138,3 +138,86 @@ class Survey1Response(BaseModel):
     participant_id: str
     survey_id: str
     timestamp: datetime
+
+
+class Survey3Item(BaseModel):
+    """Individual Survey 3 item response (6-point Likert scale)"""
+
+    question_id: str = Field(
+        ..., description="Identifier for the Survey 3 question"
+    )
+    response: int = Field(
+        ...,
+        ge=1,
+        le=6,
+        description="Response value (1-6 scale: completely disagree to completely agree)",
+    )
+
+
+class Survey3Request(BaseModel):
+    """Survey 3 (Follow-Up) response model
+
+    This survey consists of two blocks of 8 compulsory Likert questions
+    (1–6 scale, completely disagree to completely agree):
+    - 8 items about the original topic (e.g., MS Teams)
+    - 8 items about their opinion of the chatbot from Survey 2
+    Each item allows exactly one response in Qualtrics.
+    """
+
+    participant_id: str = Field(
+        ..., description="Unique participant identifier from Qualtrics"
+    )
+    prolific_id: Optional[str] = Field(
+        None,
+        description="Prolific participant ID (if already available via embedded data / earlier surveys)",
+    )
+    prolific_id_text_entry: Optional[str] = Field(
+        None,
+        description="Prolific ID entered by participant in Survey 3 (text entry); stored separately",
+    )
+    qualtrics_response_id: Optional[str] = Field(
+        None, description="Qualtrics response ID"
+    )
+
+    topic_condition: Optional[str] = Field(
+        None,
+        description="Topic condition (e.g., 'teams', 'plastic_ban', 'pe_mandatory') if applicable",
+    )
+
+    topic_items: List[Survey3Item] = Field(
+        ...,
+        min_items=8,
+        max_items=8,
+        description="8 compulsory Likert questions about the topic (1–6 scale)",
+    )
+
+    chatbot_items: List[Survey3Item] = Field(
+        ...,
+        min_items=8,
+        max_items=8,
+        description="8 compulsory Likert questions about the chatbot from Survey 2 (1–6 scale)",
+    )
+
+    survey_completion_time: Optional[datetime] = Field(
+        None, description="Survey completion timestamp"
+    )
+    ip_address: Optional[str] = Field(None, description="IP address of participant")
+    user_agent: Optional[str] = Field(None, description="User agent string")
+
+    study_comment_or_withdrawal: Optional[str] = Field(
+        None,
+        description=(
+            "Optional free-text field: comments about the study or request to withdraw "
+            "from the study (as shown in the final Survey 3 question)"
+        ),
+    )
+
+
+class Survey3Response(BaseModel):
+    """Response model for Survey 3 submission"""
+
+    success: bool
+    message: str
+    participant_id: str
+    survey_id: str
+    timestamp: datetime
