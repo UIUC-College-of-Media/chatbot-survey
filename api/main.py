@@ -1,11 +1,13 @@
 import asyncio
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 
 import motor.motor_asyncio
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from api.schema.chat import ChatHistoryResponse, ChatMessageResponse, ChatSendRequest, ChatSendResponse
 from api.schema.survey import (
@@ -19,12 +21,12 @@ load_dotenv()
 app = FastAPI(
     title="Persuasive AI Study API",
     description="API for collecting and storing survey responses for the Persuasive AI study",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  #TODO: In production, specify exact origins
+    allow_origins=["*"],  # TODO: In production, specify exact origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,113 +38,89 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "persuasive_ai_study")
 _client = None
 _db = None
 _survey1_collection = None
-_participants_collection = None
-_chat_messages_collection = None
-# Process-local guard for "one active generation per participant" in local dev.
-_inflight_participants = set()
+
+# Process-local guard for one active generation per participant+condition in local dev.
+_inflight_sessions: set[tuple[str, str]] = set()
 _inflight_lock = asyncio.Lock()
 
+
 def get_database():
-    """Get database connection, reusing existing connection for serverless"""
-    global _client, _db, _survey1_collection, _participants_collection, _chat_messages_collection
-    
+    """Get database connection, reusing existing connection for serverless."""
+    global _client, _db, _survey1_collection
+
     if _client is None:
         _client = motor.motor_asyncio.AsyncIOMotorClient(
             MONGODB_URL,
-            maxPoolSize=10,  
-            minPoolSize=1,   
-            serverSelectionTimeoutMS=5000  
+            maxPoolSize=10,
+            minPoolSize=1,
+            serverSelectionTimeoutMS=5000,
         )
         _db = _client[DATABASE_NAME]
         _survey1_collection = _db["survey1_responses"]
-        _participants_collection = _db["participants"]
-        _chat_messages_collection = _db["chat_messages"]
-    
+
     return _client, _db, _survey1_collection
 
 
-def get_chat_collections():
-    """Return Mongo collections used by the chat feature."""
-    client, db, _ = get_database()
-    return client, db["participants"], db["chat_messages"]
-
-
-async def participant_exists(participants_collection, participant_id: str) -> bool:
-    participant = await participants_collection.find_one(
-        {"participant_id": participant_id, "status": {"$ne": "disabled"}}
-    )
-    return participant is not None
-
-
-async def list_chat_messages(chat_messages_collection, participant_id: str):
-    cursor = chat_messages_collection.find({"participant_id": participant_id}).sort(
-        "created_at", 1
-    )
-    return await cursor.to_list(length=1000)
-
-
-def _serialize_chat_message(document: dict) -> ChatMessageResponse:
-    return ChatMessageResponse(
-        role=document["role"],
-        content=document["content"],
-        created_at=document["created_at"],
-    )
-
-async def _acquire_inflight(participant_id: str) -> bool:
-    # Atomically mark a participant as "busy" so concurrent sends return 409.
+async def _acquire_inflight(participant_id: str, condition_key: str) -> bool:
+    # Atomically mark a session as busy so concurrent sends return 409.
+    key = (participant_id, condition_key)
     async with _inflight_lock:
-        if participant_id in _inflight_participants:
+        if key in _inflight_sessions:
             return False
-        _inflight_participants.add(participant_id)
+        _inflight_sessions.add(key)
         return True
 
 
-async def _release_inflight(participant_id: str) -> None:
-    # Always clear the busy flag after request completion/error.
+async def _release_inflight(participant_id: str, condition_key: str) -> None:
+    # Always clear busy flag after request completion/error.
+    key = (participant_id, condition_key)
     async with _inflight_lock:
-        _inflight_participants.discard(participant_id)
+        _inflight_sessions.discard(key)
 
 
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Persuasive AI Study API",
-        "version": "1.0.0",
-        "endpoints": {
-            "survey1": "/api/v1/survey1",
-            "chat_send": "/api/v1/chat/send",
-            "chat_history": "/api/v1/chat/history/{participant_id}",
-            "health": "/health"
-        }
-    }
+def _to_chat_session_response(session) -> ChatSessionResponse:
+    return ChatSessionResponse(
+        participant_id=session.participant_id,
+        condition_key=session.condition_key,
+        condition_label=session.condition_label,
+        topic=session.topic,
+        statement=session.statement,
+        messages=session.messages,
+    )
+
+
+@app.get("/", response_class=FileResponse)
+async def home_page():
+    """Serve the demo frontend. It handles setup mode vs chat mode based on query params."""
+    frontend_path = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+    return FileResponse(frontend_path)
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
+    """Health check endpoint."""
     try:
-        client, db, survey1_collection = get_database()
-        await client.admin.command('ping')
+        client, _, _ = get_database()
+        await client.admin.command("ping")
         return {
             "status": "healthy",
             "database": "connected",
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.now(UTC),
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Database connection failed: {str(e)}"
+            detail=f"Database connection failed: {str(e)}",
         )
 
 
-@app.post("/api/v1/survey1", response_model=Survey1Response, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/api/v1/survey1",
+    response_model=Survey1Response,
+    status_code=status.HTTP_201_CREATED,
+)
 async def submit_survey1(survey_data: Survey1Request):
-    """
-    Submit Survey 1 responses
-    
-    This endpoint receives responses from Qualtrics survey and stores them in MongoDB.
-    """
+    """Submit Survey 1 responses from Qualtrics and store them in MongoDB."""
     try:
         client, db, survey1_collection = get_database()
         
@@ -178,43 +156,77 @@ async def submit_survey1(survey_data: Survey1Request):
             "survey_completion_time": survey_data.survey_completion_time or datetime.utcnow(),
             "ip_address": survey_data.ip_address,
             "user_agent": survey_data.user_agent,
-            "created_at": datetime.utcnow(),
+            "created_at": datetime.now(UTC),
             "survey_type": "survey1_baseline",
-            "week": 0
+            "week": 0,
         }
-        
+
         result = await survey1_collection.insert_one(document)
-        
+
         return Survey1Response(
             success=True,
             message="Survey 1 response stored successfully",
             participant_id=survey_data.participant_id,
             survey_id=str(result.inserted_id),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC),
         )
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store survey response: {str(e)}"
+            detail=f"Failed to store survey response: {str(e)}",
         )
 
 
-@app.get("/api/v1/chat/history/{participant_id}", response_model=ChatHistoryResponse)
-async def get_chat_history(participant_id: str):
-    """Return a participant's single-session chat history."""
+@app.get("/api/v1/chat/conditions", response_model=ConditionsResponse)
+async def get_conditions():
+    return ConditionsResponse(conditions=condition_metadata())
+
+
+@app.post("/api/v1/chat/initialize", response_model=ChatSessionResponse)
+async def initialize_chat(payload: ChatInitializeRequest):
     try:
-        _, participants_collection, chat_messages_collection = get_chat_collections()
+        session = await initialize_chat_session(
+            participant_id=payload.participant_id,
+            condition_key=payload.condition_key,
+            user_answer=payload.user_answer,
+            argument=payload.argument,
+        )
+        return _to_chat_session_response(session)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize chat: {str(e)}",
+        )
 
-        if not await participant_exists(participants_collection, participant_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unknown participant_id",
-            )
 
-        documents = await list_chat_messages(chat_messages_collection, participant_id)
-        messages = [_serialize_chat_message(doc) for doc in documents]
-        return ChatHistoryResponse(participant_id=participant_id, messages=messages)
+@app.get("/api/v1/chat/sessions/{participant_id}", response_model=ChatSessionsResponse)
+async def get_chat_sessions(participant_id: str):
+    sessions = await list_participant_sessions(participant_id)
+    summaries = [
+        {
+            "participant_id": session.participant_id,
+            "condition_key": session.condition_key,
+            "condition_label": session.condition_label,
+            "topic": session.topic,
+            "statement": session.statement,
+            "updated_at": session.updated_at,
+        }
+        for session in sessions
+    ]
+    return ChatSessionsResponse(participant_id=participant_id, sessions=summaries)
+
+
+@app.get(
+    "/api/v1/chat/history/{participant_id}/{condition_key}",
+    response_model=ChatSessionResponse,
+)
+async def get_chat_history(participant_id: str, condition_key: str):
+    try:
+        session = await get_chat_session(participant_id, condition_key)
+        return _to_chat_session_response(session)
     except HTTPException:
         raise
     except Exception as e:
@@ -226,54 +238,24 @@ async def get_chat_history(participant_id: str):
 
 @app.post("/api/v1/chat/send", response_model=ChatSendResponse)
 async def send_chat_message(payload: ChatSendRequest):
-    """Send a user message, call the LLM, persist the transcript, and return the reply."""
-    acquired = await _acquire_inflight(payload.participant_id)
+    acquired = await _acquire_inflight(payload.participant_id, payload.condition_key)
     if not acquired:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A response is already being generated for this participant",
+            detail="A response is already being generated for this participant and condition",
         )
 
     try:
-        _, participants_collection, chat_messages_collection = get_chat_collections()
-
-        if not await participant_exists(participants_collection, payload.participant_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unknown participant_id",
-            )
-
-        now = datetime.now(UTC)
-        user_message_doc = {
-            "participant_id": payload.participant_id,
-            "role": "user",
-            "content": payload.message,
-            "created_at": now,
-        }
-        await chat_messages_collection.insert_one(user_message_doc)
-
-        history_docs = await list_chat_messages(chat_messages_collection, payload.participant_id)
-        assistant_text = await generate_chat_reply(
+        session = await append_and_generate(
             participant_id=payload.participant_id,
-            messages=[
-                {"role": doc["role"], "content": doc["content"]}
-                for doc in history_docs
-            ],
+            condition_key=payload.condition_key,
+            message=payload.message,
         )
-
-        assistant_doc = {
-            "participant_id": payload.participant_id,
-            "role": "assistant",
-            "content": assistant_text,
-            "created_at": datetime.now(UTC),
-        }
-        await chat_messages_collection.insert_one(assistant_doc)
-
-        all_docs = await list_chat_messages(chat_messages_collection, payload.participant_id)
         return ChatSendResponse(
             participant_id=payload.participant_id,
-            reply=assistant_text,
-            messages=[_serialize_chat_message(doc) for doc in all_docs],
+            condition_key=payload.condition_key,
+            reply=session.messages[-1]["content"],
+            messages=session.messages,
         )
     except HTTPException:
         raise
@@ -283,22 +265,22 @@ async def send_chat_message(payload: ChatSendRequest):
             detail=f"Failed to process chat message: {str(e)}",
         )
     finally:
-        await _release_inflight(payload.participant_id)
+        await _release_inflight(payload.participant_id, payload.condition_key)
 
 
-@app.post("/api/v1/chat/reset/{participant_id}")
-async def reset_chat_history(participant_id: str):
-    """Development-only helper to clear chat history for a participant."""
+@app.post(
+    "/api/v1/chat/reset/{participant_id}/{condition_key}",
+    response_model=ChatResetResponse,
+)
+async def reset_chat_history(participant_id: str, condition_key: str):
     try:
-        _, participants_collection, chat_messages_collection = get_chat_collections()
-        if not await participant_exists(participants_collection, participant_id):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unknown participant_id",
-            )
-
-        await chat_messages_collection.delete_many({"participant_id": participant_id})
-        return {"success": True, "participant_id": participant_id}
+        session = await clear_chat_session(participant_id, condition_key)
+        return ChatResetResponse(
+            success=True,
+            participant_id=participant_id,
+            condition_key=session.condition_key,
+            messages=session.messages,
+        )
     except HTTPException:
         raise
     except Exception as e:

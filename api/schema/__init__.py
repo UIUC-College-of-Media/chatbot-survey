@@ -1,8 +1,13 @@
 from api.schema.chat import (
-    ChatHistoryResponse,
+    ChatInitializeRequest,
     ChatMessageResponse,
+    ChatResetResponse,
     ChatSendRequest,
     ChatSendResponse,
+    ChatSessionResponse,
+    ChatSessionsResponse,
+    ConditionDescriptor,
+    ConditionsResponse,
 )
 from api.schema.survey import (
     AttitudeItem,
@@ -18,8 +23,13 @@ __all__ = [
     "OpinionStatementItem",
     "Survey1Request",
     "Survey1Response",
+    "ConditionDescriptor",
+    "ConditionsResponse",
+    "ChatInitializeRequest",
     "ChatSendRequest",
     "ChatMessageResponse",
-    "ChatHistoryResponse",
+    "ChatSessionResponse",
+    "ChatSessionsResponse",
     "ChatSendResponse",
+    "ChatResetResponse",
 ]
