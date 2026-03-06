@@ -1,13 +1,18 @@
+import asyncio
+import os
+from datetime import UTC, datetime
+
+import motor.motor_asyncio
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
-import motor.motor_asyncio
-import os
-from dotenv import load_dotenv
-from api.schema import (
+
+from api.schema.chat import ChatHistoryResponse, ChatMessageResponse, ChatSendRequest, ChatSendResponse
+from api.schema.survey import (
     Survey1Request, Survey1Response,
     Survey3Request, Survey3Response,
 )
+from api.services.llm import generate_chat_reply
 
 load_dotenv()
 
@@ -31,11 +36,15 @@ DATABASE_NAME = os.getenv("DATABASE_NAME", "persuasive_ai_study")
 _client = None
 _db = None
 _survey1_collection = None
-_survey3_collection = None
+_participants_collection = None
+_chat_messages_collection = None
+# Process-local guard for "one active generation per participant" in local dev.
+_inflight_participants = set()
+_inflight_lock = asyncio.Lock()
 
 def get_database():
     """Get database connection, reusing existing connection for serverless"""
-    global _client, _db, _survey1_collection, _survey3_collection
+    global _client, _db, _survey1_collection, _participants_collection, _chat_messages_collection
     
     if _client is None:
         _client = motor.motor_asyncio.AsyncIOMotorClient(
@@ -46,20 +55,52 @@ def get_database():
         )
         _db = _client[DATABASE_NAME]
         _survey1_collection = _db["survey1_responses"]
-        _survey3_collection = _db["survey3_responses"]
+        _participants_collection = _db["participants"]
+        _chat_messages_collection = _db["chat_messages"]
     
     return _client, _db, _survey1_collection
 
 
-def get_survey3_collection():
-    """Get Survey 3 collection, ensuring database is initialized"""
-    global _survey3_collection
+def get_chat_collections():
+    """Return Mongo collections used by the chat feature."""
+    client, db, _ = get_database()
+    return client, db["participants"], db["chat_messages"]
 
-    if _survey3_collection is None:
-        # This will initialize the client, db, and collections if needed
-        get_database()
 
-    return _survey3_collection
+async def participant_exists(participants_collection, participant_id: str) -> bool:
+    participant = await participants_collection.find_one(
+        {"participant_id": participant_id, "status": {"$ne": "disabled"}}
+    )
+    return participant is not None
+
+
+async def list_chat_messages(chat_messages_collection, participant_id: str):
+    cursor = chat_messages_collection.find({"participant_id": participant_id}).sort(
+        "created_at", 1
+    )
+    return await cursor.to_list(length=1000)
+
+
+def _serialize_chat_message(document: dict) -> ChatMessageResponse:
+    return ChatMessageResponse(
+        role=document["role"],
+        content=document["content"],
+        created_at=document["created_at"],
+    )
+
+async def _acquire_inflight(participant_id: str) -> bool:
+    # Atomically mark a participant as "busy" so concurrent sends return 409.
+    async with _inflight_lock:
+        if participant_id in _inflight_participants:
+            return False
+        _inflight_participants.add(participant_id)
+        return True
+
+
+async def _release_inflight(participant_id: str) -> None:
+    # Always clear the busy flag after request completion/error.
+    async with _inflight_lock:
+        _inflight_participants.discard(participant_id)
 
 
 @app.get("/")
@@ -70,7 +111,8 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "survey1": "/api/v1/survey1",
-            "survey3": "/api/v1/survey3",
+            "chat_send": "/api/v1/chat/send",
+            "chat_history": "/api/v1/chat/history/{participant_id}",
             "health": "/health"
         }
     }
@@ -158,57 +200,111 @@ async def submit_survey1(survey_data: Survey1Request):
         )
 
 
-@app.post("/api/v1/survey3", response_model=Survey3Response, status_code=status.HTTP_201_CREATED)
-async def submit_survey3(survey_data: Survey3Request):
-    """
-    Submit Survey 3 responses
-
-    This endpoint receives responses from the follow-up survey (Survey 3) and stores
-    them in MongoDB. Survey 3 consists of 8 compulsory Likert questions with
-    6 response options (completely disagree to completely agree).
-    """
+@app.get("/api/v1/chat/history/{participant_id}", response_model=ChatHistoryResponse)
+async def get_chat_history(participant_id: str):
+    """Return a participant's single-session chat history."""
     try:
-        client, db, _ = get_database()
-        survey3_collection = get_survey3_collection()
+        _, participants_collection, chat_messages_collection = get_chat_collections()
 
-        document = {
-            "participant_id": survey_data.participant_id,
-            "prolific_id": survey_data.prolific_id,
-            "prolific_id_text_entry": survey_data.prolific_id_text_entry,
-            "qualtrics_response_id": survey_data.qualtrics_response_id,
-            "topic_condition": survey_data.topic_condition,
-            "topic_items": [
-                {"question_id": item.question_id, "response": item.response}
-                for item in survey_data.topic_items
-            ],
-            "chatbot_items": [
-                {"question_id": item.question_id, "response": item.response}
-                for item in survey_data.chatbot_items
-            ],
-            "survey_completion_time": survey_data.survey_completion_time
-            or datetime.utcnow(),
-            "ip_address": survey_data.ip_address,
-            "user_agent": survey_data.user_agent,
-            "study_comment_or_withdrawal": survey_data.study_comment_or_withdrawal,
-            "created_at": datetime.utcnow(),
-            "survey_type": "survey3_followup",
-            "week": 2,
-        }
+        if not await participant_exists(participants_collection, participant_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown participant_id",
+            )
 
-        result = await survey3_collection.insert_one(document)
-
-        return Survey3Response(
-            success=True,
-            message="Survey 3 response stored successfully",
-            participant_id=survey_data.participant_id,
-            survey_id=str(result.inserted_id),
-            timestamp=datetime.utcnow(),
-        )
-
+        documents = await list_chat_messages(chat_messages_collection, participant_id)
+        messages = [_serialize_chat_message(doc) for doc in documents]
+        return ChatHistoryResponse(participant_id=participant_id, messages=messages)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store survey 3 response: {str(e)}",
+            detail=f"Failed to fetch chat history: {str(e)}",
+        )
+
+
+@app.post("/api/v1/chat/send", response_model=ChatSendResponse)
+async def send_chat_message(payload: ChatSendRequest):
+    """Send a user message, call the LLM, persist the transcript, and return the reply."""
+    acquired = await _acquire_inflight(payload.participant_id)
+    if not acquired:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A response is already being generated for this participant",
+        )
+
+    try:
+        _, participants_collection, chat_messages_collection = get_chat_collections()
+
+        if not await participant_exists(participants_collection, payload.participant_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown participant_id",
+            )
+
+        now = datetime.now(UTC)
+        user_message_doc = {
+            "participant_id": payload.participant_id,
+            "role": "user",
+            "content": payload.message,
+            "created_at": now,
+        }
+        await chat_messages_collection.insert_one(user_message_doc)
+
+        history_docs = await list_chat_messages(chat_messages_collection, payload.participant_id)
+        assistant_text = await generate_chat_reply(
+            participant_id=payload.participant_id,
+            messages=[
+                {"role": doc["role"], "content": doc["content"]}
+                for doc in history_docs
+            ],
+        )
+
+        assistant_doc = {
+            "participant_id": payload.participant_id,
+            "role": "assistant",
+            "content": assistant_text,
+            "created_at": datetime.now(UTC),
+        }
+        await chat_messages_collection.insert_one(assistant_doc)
+
+        all_docs = await list_chat_messages(chat_messages_collection, payload.participant_id)
+        return ChatSendResponse(
+            participant_id=payload.participant_id,
+            reply=assistant_text,
+            messages=[_serialize_chat_message(doc) for doc in all_docs],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process chat message: {str(e)}",
+        )
+    finally:
+        await _release_inflight(payload.participant_id)
+
+
+@app.post("/api/v1/chat/reset/{participant_id}")
+async def reset_chat_history(participant_id: str):
+    """Development-only helper to clear chat history for a participant."""
+    try:
+        _, participants_collection, chat_messages_collection = get_chat_collections()
+        if not await participant_exists(participants_collection, participant_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown participant_id",
+            )
+
+        await chat_messages_collection.delete_many({"participant_id": participant_id})
+        return {"success": True, "participant_id": participant_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset chat history: {str(e)}",
         )
 
 

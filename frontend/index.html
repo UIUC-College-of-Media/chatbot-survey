@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Study Chat</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --panel: #fffaf1;
+        --ink: #1d1c1a;
+        --muted: #6a655b;
+        --accent: #0d5c63;
+        --accent-2: #f4a259;
+        --border: #d8ceb8;
+        --error: #8f1d1d;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 0% 0%, #efe2c4 0, transparent 40%),
+          radial-gradient(circle at 100% 100%, #d5ebe7 0, transparent 45%),
+          var(--bg);
+      }
+      .shell {
+        width: min(900px, 100%);
+        margin: 0 auto;
+        padding: 16px;
+      }
+      .card {
+        background: color-mix(in srgb, var(--panel) 92%, white);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+      }
+      .header {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(135deg, rgba(13, 92, 99, 0.08), rgba(244, 162, 89, 0.08));
+      }
+      .title { font-size: 18px; margin: 0; }
+      .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+      .messages {
+        height: 55vh;
+        min-height: 320px;
+        overflow-y: auto;
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .msg {
+        max-width: 82%;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        line-height: 1.35;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .msg.user {
+        align-self: flex-end;
+        background: rgba(13, 92, 99, 0.09);
+        border-color: rgba(13, 92, 99, 0.25);
+      }
+      .msg.assistant {
+        align-self: flex-start;
+        background: rgba(244, 162, 89, 0.08);
+        border-color: rgba(244, 162, 89, 0.25);
+      }
+      .status {
+        min-height: 20px;
+        padding: 0 16px 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .status.error { color: var(--error); }
+      .composer {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        padding: 12px;
+        border-top: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.6);
+      }
+      textarea {
+        resize: vertical;
+        min-height: 52px;
+        max-height: 140px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        font: inherit;
+        color: inherit;
+        background: white;
+      }
+      button {
+        align-self: end;
+        border: 1px solid rgba(13, 92, 99, 0.35);
+        background: var(--accent);
+        color: white;
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button[disabled], textarea[disabled] {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 14px;
+        border: 1px dashed var(--border);
+        padding: 14px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+      @media (max-width: 640px) {
+        .shell { padding: 8px; }
+        .messages { height: 60vh; }
+        .msg { max-width: 92%; }
+        .composer { grid-template-columns: 1fr; }
+        button { width: 100%; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="card">
+        <div class="header">
+          <h1 class="title">Study Chat</h1>
+          <div class="meta" id="meta"></div>
+        </div>
+        <div class="messages" id="messages"></div>
+        <div class="status" id="status"></div>
+        <form class="composer" id="composer">
+          <textarea id="messageInput" placeholder="Type your message..." required></textarea>
+          <button type="submit" id="sendButton">Send</button>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const participantId = (params.get("participant_id") || "").trim();
+      const apiBase = (params.get("api_base") || "http://localhost:8000").replace(/\/+$/, "");
+
+      const messagesEl = document.getElementById("messages");
+      const statusEl = document.getElementById("status");
+      const metaEl = document.getElementById("meta");
+      const composerEl = document.getElementById("composer");
+      const inputEl = document.getElementById("messageInput");
+      const sendButtonEl = document.getElementById("sendButton");
+
+      let isSending = false;
+
+      function setStatus(text, isError = false) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("error", isError);
+      }
+
+      function setBusy(nextBusy) {
+        isSending = nextBusy;
+        inputEl.disabled = nextBusy || !participantId;
+        sendButtonEl.disabled = nextBusy || !participantId;
+        sendButtonEl.textContent = nextBusy ? "Sending..." : "Send";
+      }
+
+      function escapeHtml(text) {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function renderMessages(messages) {
+        if (!messages || messages.length === 0) {
+          messagesEl.innerHTML = '<div class="empty">No chat history yet. Send a message to begin.</div>';
+          return;
+        }
+        messagesEl.innerHTML = messages
+          .map(
+            (msg) =>
+              `<div class="msg ${msg.role === "user" ? "user" : "assistant"}"><strong>${msg.role}</strong><br>${escapeHtml(msg.content)}</div>`
+          )
+          .join("");
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      async function loadHistory() {
+        if (!participantId) {
+          metaEl.textContent = "Missing participant_id in URL";
+          setStatus("Open this page with ?participant_id=participant-123", true);
+          renderMessages([]);
+          setBusy(false);
+          return;
+        }
+        // metaEl.textContent = `participant_id=${participantId}`;
+        setStatus("Loading chat history...");
+        try {
+          const response = await fetch(`${apiBase}/api/v1/chat/history/${encodeURIComponent(participantId)}`);
+          const body = await response.json();
+          if (!response.ok) {
+            throw new Error(body.detail || "Failed to load history");
+          }
+          renderMessages(body.messages || []);
+          setStatus("");
+        } catch (error) {
+          renderMessages([]);
+          setStatus(String(error.message || error), true);
+        }
+      }
+
+      composerEl.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (isSending || !participantId) return;
+
+        const text = inputEl.value.trim();
+        if (!text) return;
+
+        setBusy(true);
+        setStatus("Waiting for assistant reply...");
+
+        try {
+          const response = await fetch(`${apiBase}/api/v1/chat/send`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ participant_id: participantId, message: text })
+          });
+          const body = await response.json();
+          if (!response.ok) {
+            throw new Error(body.detail || "Request failed");
+          }
+          renderMessages(body.messages || []);
+          inputEl.value = "";
+          setStatus("");
+        } catch (error) {
+          setStatus(String(error.message || error), true);
+        } finally {
+          setBusy(false);
+          inputEl.focus();
+        }
+      });
+
+      setBusy(true);
+      loadHistory().finally(() => setBusy(false));
+    </script>
+  </body>
+</html>
