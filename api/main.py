@@ -117,6 +117,18 @@ async def submit_survey1(survey_data: Survey1Request):
             "attitudes": [{"item_id": item.item_id, "response": item.response} for item in survey_data.attitudes],
             "demographics": survey_data.demographics.dict() if survey_data.demographics else None,
             "survey_comment": survey_data.survey_comment,
+            "pre_block": {
+                "block_id": survey_data.pre_block_id,
+                "topic": survey_data.pre_topic,
+                "personalization": survey_data.pre_personalization,
+                "is_control": survey_data.pre_is_control,
+                "responses": [
+                    {"item_id": item.item_id, "response": item.response}
+                    for item in (survey_data.pre_block_responses or [])
+                ],
+            }
+            if survey_data.pre_block_id is not None
+            else None,
             "survey_completion_time": survey_data.survey_completion_time or datetime.utcnow(),
             "ip_address": survey_data.ip_address,
             "user_agent": survey_data.user_agent,

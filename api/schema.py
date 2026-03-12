@@ -23,6 +23,20 @@ class OpinionStatementItem(BaseModel):
     )
 
 
+class PreBlockItem(BaseModel):
+    """Individual pre-block item response (5 questions, 6-point Likert)"""
+
+    item_id: str = Field(
+        ..., description="Identifier for the pre-block question (e.g., pre1–pre5)"
+    )
+    response: int = Field(
+        ...,
+        ge=1,
+        le=6,
+        description="Response value (1-6 scale: completely disagree to completely agree)",
+    )
+
+
 class Demographics(BaseModel):
     """Demographics information"""
 
@@ -108,6 +122,41 @@ class Survey1Request(BaseModel):
     topic_behavior: Optional[str] = Field(
         None,
         description="Topic-specific behavior question (3 options, e.g., frequency of plastic bottle usage)",
+    )
+
+    # Randomized pre-block (5 questions) metadata and responses
+    pre_block_id: Optional[str] = Field(
+        None,
+        description=(
+            "Identifier for the randomized pre-block shown "
+            "(e.g., NP_TEAMS, PERS_PLASTIC, CNTR_PHYSICAL)"
+        ),
+    )
+    pre_topic: Optional[str] = Field(
+        None,
+        description=(
+            "Topic for the pre-block (e.g., 'teams', 'plastic', 'physical') "
+            "derived from the randomized block"
+        ),
+    )
+    pre_personalization: Optional[str] = Field(
+        None,
+        description=(
+            "Personalization condition for the pre-block: "
+            "'non_personalized', 'personalized', or 'control'"
+        ),
+    )
+    pre_is_control: Optional[bool] = Field(
+        None,
+        description=(
+            "Whether the participant is in the control condition for the randomized pre-block"
+        ),
+    )
+    pre_block_responses: Optional[List[PreBlockItem]] = Field(
+        None,
+        min_items=5,
+        max_items=5,
+        description="Five 6-point Likert responses for the randomized pre-block",
     )
 
     attitudes: List[AttitudeItem] = Field(
