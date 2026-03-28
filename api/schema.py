@@ -4,59 +4,74 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class AttitudeItem(BaseModel):
-    """Individual attitude item response"""
+class BlockStatementItem(BaseModel):
+    """One row from the 7-statement opinion matrix (1-6 Likert)"""
 
-    item_id: str = Field(..., description="Identifier for the attitude item")
-    response: int = Field(..., ge=1, le=7, description="Response value (1-7 scale)")
-
-
-class OpinionStatementItem(BaseModel):
-    """Individual opinion statement response (6-point Likert scale)"""
-
-    statement_id: str = Field(..., description="Identifier for the opinion statement")
-    response: int = Field(
-        ...,
-        ge=1,
-        le=6,
-        description="Response value (1-6 scale: completely disagree to completely agree)",
-    )
-
-
-class PreBlockItem(BaseModel):
-    """Individual pre-block item response (5 questions, 6-point Likert)"""
-
-    item_id: str = Field(
-        ..., description="Identifier for the pre-block question (e.g., pre1–pre5)"
+    statement_id: str = Field(
+        ..., description="Identifier for the statement row (e.g., stmt1–stmt7)"
     )
     response: int = Field(
         ...,
         ge=1,
         le=6,
-        description="Response value (1-6 scale: completely disagree to completely agree)",
+        description="Response value (1-6: completely disagree to completely agree)",
+    )
+
+
+class BlockResponses(BaseModel):
+    """All responses from the randomized 5-question block.
+
+    Each block contains:
+    - 1 opinion item (single Likert 1-6)
+    - 1 open-text reason
+    - 7 opinion statement matrix rows (each 1-6)
+    - 1 feeling strength item (1-6)
+    - 1 topic importance item (1-6)
+    """
+
+    opinion: Optional[int] = Field(
+        None,
+        ge=1,
+        le=6,
+        description="Opinion on the main statement (1-6: completely disagree to completely agree)",
+    )
+    opinion_reason: Optional[str] = Field(
+        None,
+        description="Open-text explanation for why they agree/disagree",
+    )
+    statements: Optional[List[BlockStatementItem]] = Field(
+        None,
+        min_length=7,
+        max_length=7,
+        description="7 opinion statement responses from the matrix (each 1-6)",
+    )
+    feeling_strength: Optional[int] = Field(
+        None,
+        ge=1,
+        le=6,
+        description="How strongly do you feel about the topic? (1=Not at all, 6=Very strongly)",
+    )
+    topic_importance: Optional[int] = Field(
+        None,
+        ge=1,
+        le=6,
+        description="How important is the topic to you? (1=Not at all, 6=Very important)",
     )
 
 
 class Demographics(BaseModel):
     """Demographics information"""
 
-    age: Optional[int] = Field(None, ge=18, description="Participant age (input field)")
-    gender: Optional[str] = Field(
-        None,
-        description="Gender identity (5 options: 4 predefined + 1 self-describe option)",
-    )
-    gender_self_describe: Optional[str] = Field(
-        None,
-        description="Self-described gender (if 'self-describe' option was selected)",
-    )
+    age: Optional[int] = Field(None, ge=18, description="Participant age")
+    gender: Optional[str] = Field(None, description="Gender identity")
     education: Optional[str] = Field(
-        None, description="Highest level of education (6 options)"
+        None, description="Highest level of education"
     )
     kids_in_school: Optional[str] = Field(
-        None, description="Do you have kids in school? (3 options)"
+        None, description="Do you have kids in school?"
     )
     political_belief: Optional[str] = Field(
-        None, description="Political belief (6 options)"
+        None, description="Political belief on conservative-progressive scale"
     )
 
 
@@ -75,101 +90,45 @@ class Survey1Request(BaseModel):
         ..., description="Topic condition: 'teams', 'plastic_ban', or 'pe_mandatory'"
     )
 
-    # Opinion question (first question - 6 choices: completely agree to completely disagree)
-    opinion_question: Optional[int] = Field(
+    topic_usage: Optional[str] = Field(
         None,
-        ge=1,
-        le=6,
-        description="Opinion response (1-6 scale: completely agree to completely disagree)",
+        description="Topic usage response (e.g., 'How would you describe your use of MS Teams?')",
     )
-    opinion_reason: Optional[str] = Field(
-        None, description="Reason/explanation for the opinion response"
-    )
-
-    # Opinion statements (7 statements with 6-point Likert scale each)
-    opinion_statements: List[OpinionStatementItem] = Field(
-        ...,
-        min_items=7,
-        max_items=7,
-        description="7 opinion statements about the topic",
-    )
-
-    # Feeling and importance questions (6-point scale each)
-    feeling_strength: Optional[int] = Field(
-        None,
-        ge=1,
-        le=6,
-        description="How strongly do you feel about the topic? (1=Not at all, 6=Very strongly)",
-    )
-    topic_importance_feeling: Optional[int] = Field(
-        None,
-        ge=1,
-        le=6,
-        description="How important is the topic to you? (1=Not at all, 6=Very important)",
-    )
-
-    # Topic usage question (topic-dependent, e.g., "How do you use MS Teams?")
-    topic_usage: Optional[List[str]] = Field(
-        None,
-        description="How do you use the topic? (multiple choice, 6 options total with 1 self-describe option)",
-    )
-    topic_usage_self_describe: Optional[str] = Field(
-        None,
-        description="Self-described topic usage (if 'self-describe' option was selected)",
-    )
-
-    # Topic behavior question (topic-dependent, e.g., "How often do you drink water in plastic bottles?")
     topic_behavior: Optional[str] = Field(
         None,
-        description="Topic-specific behavior question (3 options, e.g., frequency of plastic bottle usage)",
+        description="Topic behavior response (e.g., 'How often do you drink water in plastic bottles?')",
     )
 
-    # Randomized pre-block (5 questions) metadata and responses
+    # Randomized block metadata
     pre_block_id: Optional[str] = Field(
         None,
-        description=(
-            "Identifier for the randomized pre-block shown "
-            "(e.g., NP_TEAMS, PERS_PLASTIC, CNTR_PHYSICAL)"
-        ),
+        description="Identifier for the randomized block (e.g., NP_TEAMS, PERS_PLASTIC, CTRL_PE)",
     )
     pre_topic: Optional[str] = Field(
         None,
-        description=(
-            "Topic for the pre-block (e.g., 'teams', 'plastic', 'physical') "
-            "derived from the randomized block"
-        ),
+        description="Topic for the block: 'teams', 'plastic_ban', or 'pe_mandatory'",
     )
     pre_personalization: Optional[str] = Field(
         None,
-        description=(
-            "Personalization condition for the pre-block: "
-            "'non_personalized', 'personalized', or 'control'"
-        ),
+        description="Personalization condition: 'non_personalized', 'personalized', or 'control'",
     )
     pre_is_control: Optional[bool] = Field(
         None,
-        description=(
-            "Whether the participant is in the control condition for the randomized pre-block"
-        ),
-    )
-    pre_block_responses: Optional[List[PreBlockItem]] = Field(
-        None,
-        min_items=5,
-        max_items=5,
-        description="Five 6-point Likert responses for the randomized pre-block",
+        description="Whether the participant is in the control condition",
     )
 
-    attitudes: List[AttitudeItem] = Field(
-        ..., min_items=8, max_items=8, description="8 attitude items"
+    # Randomized block responses (opinion + reason + 7 statements + feeling + importance)
+    block_responses: Optional[BlockResponses] = Field(
+        None,
+        description="All responses from the randomized block",
     )
 
     demographics: Optional[Demographics] = Field(
         None, description="Demographics information"
     )
 
-    # End of survey optional comment
     survey_comment: Optional[str] = Field(
-        None, description="Optional comment at the end of the survey"
+        None, description="Optional comment at the end of the survey or withdrawal request"
     )
 
     survey_completion_time: Optional[datetime] = Field(
@@ -207,7 +166,7 @@ class Survey3Request(BaseModel):
     """Survey 3 (Follow-Up) response model
 
     This survey consists of two blocks of 8 compulsory Likert questions
-    (1–6 scale, completely disagree to completely agree):
+    (1-6 scale, completely disagree to completely agree):
     - 8 items about the original topic (e.g., MS Teams)
     - 8 items about their opinion of the chatbot from Survey 2
     Each item allows exactly one response in Qualtrics.
@@ -235,16 +194,16 @@ class Survey3Request(BaseModel):
 
     topic_items: List[Survey3Item] = Field(
         ...,
-        min_items=8,
-        max_items=8,
-        description="8 compulsory Likert questions about the topic (1–6 scale)",
+        min_length=8,
+        max_length=8,
+        description="8 compulsory Likert questions about the topic (1-6 scale)",
     )
 
     chatbot_items: List[Survey3Item] = Field(
         ...,
-        min_items=8,
-        max_items=8,
-        description="8 compulsory Likert questions about the chatbot from Survey 2 (1–6 scale)",
+        min_length=8,
+        max_length=8,
+        description="8 compulsory Likert questions about the chatbot from Survey 2 (1-6 scale)",
     )
 
     survey_completion_time: Optional[datetime] = Field(
