@@ -12,17 +12,21 @@ def _valid_survey_payload():
         "prolific_id": "prolific-abc",
         "qualtrics_response_id": "R_123456",
         "topic_condition": "teams",
-        "opinion_question": 4,
-        "opinion_reason": "I have mixed feelings.",
-        "opinion_statements": [
-            {"statement_id": f"statement_{i}", "response": 3} for i in range(1, 8)
-        ],
-        "feeling_strength": 5,
-        "topic_importance_feeling": 4,
-        "topic_usage": ["daily", "work"],
-        "topic_usage_self_describe": None,
+        "topic_usage": "daily",
         "topic_behavior": "often",
-        "attitudes": [{"item_id": f"attitude_{i}", "response": 6} for i in range(1, 9)],
+        "pre_block_id": "PERS_TEAMS",
+        "pre_topic": "teams",
+        "pre_personalization": "personalized",
+        "pre_is_control": False,
+        "block_responses": {
+            "opinion": 4,
+            "opinion_reason": "I have mixed feelings about Teams.",
+            "statements": [
+                {"statement_id": f"stmt{i}", "response": 3} for i in range(1, 8)
+            ],
+            "feeling_strength": 5,
+            "topic_importance": 4,
+        },
         "demographics": {
             "age": 30,
             "gender": "male",

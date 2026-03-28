@@ -4,7 +4,10 @@ from datetime import datetime
 import motor.motor_asyncio
 import os
 from dotenv import load_dotenv
-from api.schema import Survey1Request, Survey1Response, Survey3Request, Survey3Response
+from api.schema import (
+    Survey1Request, Survey1Response,
+    Survey3Request, Survey3Response,
+)
 
 load_dotenv()
 
@@ -101,34 +104,35 @@ async def submit_survey1(survey_data: Survey1Request):
     try:
         client, db, survey1_collection = get_database()
         
+        block_doc = None
+        if survey_data.pre_block_id is not None:
+            br = survey_data.block_responses
+            block_doc = {
+                "block_id": survey_data.pre_block_id,
+                "topic": survey_data.pre_topic,
+                "personalization": survey_data.pre_personalization,
+                "is_control": survey_data.pre_is_control,
+            }
+            if br:
+                block_doc["opinion"] = br.opinion
+                block_doc["opinion_reason"] = br.opinion_reason
+                block_doc["statements"] = [
+                    {"statement_id": s.statement_id, "response": s.response}
+                    for s in (br.statements or [])
+                ]
+                block_doc["feeling_strength"] = br.feeling_strength
+                block_doc["topic_importance"] = br.topic_importance
+
         document = {
             "participant_id": survey_data.participant_id,
             "prolific_id": survey_data.prolific_id,
             "qualtrics_response_id": survey_data.qualtrics_response_id,
             "topic_condition": survey_data.topic_condition,
-            "opinion_question": survey_data.opinion_question,
-            "opinion_reason": survey_data.opinion_reason,
-            "opinion_statements": [{"statement_id": item.statement_id, "response": item.response} for item in survey_data.opinion_statements],
-            "feeling_strength": survey_data.feeling_strength,
-            "topic_importance_feeling": survey_data.topic_importance_feeling,
             "topic_usage": survey_data.topic_usage,
-            "topic_usage_self_describe": survey_data.topic_usage_self_describe,
             "topic_behavior": survey_data.topic_behavior,
-            "attitudes": [{"item_id": item.item_id, "response": item.response} for item in survey_data.attitudes],
-            "demographics": survey_data.demographics.dict() if survey_data.demographics else None,
+            "pre_block": block_doc,
+            "demographics": survey_data.demographics.model_dump() if survey_data.demographics else None,
             "survey_comment": survey_data.survey_comment,
-            "pre_block": {
-                "block_id": survey_data.pre_block_id,
-                "topic": survey_data.pre_topic,
-                "personalization": survey_data.pre_personalization,
-                "is_control": survey_data.pre_is_control,
-                "responses": [
-                    {"item_id": item.item_id, "response": item.response}
-                    for item in (survey_data.pre_block_responses or [])
-                ],
-            }
-            if survey_data.pre_block_id is not None
-            else None,
             "survey_completion_time": survey_data.survey_completion_time or datetime.utcnow(),
             "ip_address": survey_data.ip_address,
             "user_agent": survey_data.user_agent,
