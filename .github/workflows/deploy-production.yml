@@ -18,8 +18,8 @@ env:
   K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE || 'chatbot-survey' }}
   K8S_OVERLAY: ${{ vars.K8S_OVERLAY || 'k8s/overlays/production' }}
   K8S_INGRESS_HOST: ${{ vars.K8S_INGRESS_HOST || 'chatbot-survey.example.com' }}
-  GHCR_BACKEND_IMAGE: ${{ vars.GHCR_BACKEND_IMAGE || format('ghcr.io/{0}/chatbot-survey-backend', github.repository_owner) }}
-  GHCR_FRONTEND_IMAGE: ${{ vars.GHCR_FRONTEND_IMAGE || format('ghcr.io/{0}/chatbot-survey-frontend', github.repository_owner) }}
+  GHCR_BACKEND_IMAGE: ${{ vars.GHCR_BACKEND_IMAGE || 'ghcr.io/uiuc-college-of-media/chatbot-survey-backend' }}
+  GHCR_FRONTEND_IMAGE: ${{ vars.GHCR_FRONTEND_IMAGE || 'ghcr.io/uiuc-college-of-media/chatbot-survey-frontend' }}
   APP_DATABASE_NAME: ${{ vars.APP_DATABASE_NAME || 'persuasive_ai_study' }}
   APP_ALLOWED_ORIGINS: ${{ vars.APP_ALLOWED_ORIGINS || format('https://{0}', vars.K8S_INGRESS_HOST || 'chatbot-survey.example.com') }}
   AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
