@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+node_modules
+frontend/node_modules
+dist
+frontend/dist
+.env
+k8s/overlays/local-kind/secrets/*.env
+k8s/overlays/production/secrets/*.env

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,17 +30,15 @@ class ConditionsResponse(BaseModel):
     conditions: List[ConditionDescriptor]
 
 
-class ChatInitializeRequest(BaseModel):
-    participant_id: str = Field(..., min_length=1, description="Participant identifier")
-    condition_key: ConditionKey
-    user_answer: Optional[int] = Field(None, ge=1, le=6)
-    argument: Optional[str] = None
-
-
 class ChatSendRequest(BaseModel):
-    participant_id: str = Field(..., min_length=1, description="Participant identifier")
-    condition_key: ConditionKey
+    prolific_id: str = Field(..., min_length=1, description="Prolific participant identifier")
     message: str = Field(..., min_length=1, max_length=4000, description="User message")
+    client_message_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=200,
+        description="Client-generated idempotency key for this user message",
+    )
 
 
 class ChatMessageResponse(BaseModel):
@@ -49,38 +47,25 @@ class ChatMessageResponse(BaseModel):
     created_at: datetime
 
 
-class ChatSessionSummary(BaseModel):
-    participant_id: str
-    condition_key: ConditionKey
-    condition_label: str
-    topic: str
-    statement: str
-    updated_at: datetime
-
-
 class ChatSessionResponse(BaseModel):
-    participant_id: str
+    prolific_id: str
     condition_key: ConditionKey
     condition_label: str
     topic: str
     statement: str
     messages: List[ChatMessageResponse]
-
-
-class ChatSessionsResponse(BaseModel):
-    participant_id: str
-    sessions: List[ChatSessionSummary]
 
 
 class ChatSendResponse(BaseModel):
-    participant_id: str
+    prolific_id: str
     condition_key: ConditionKey
     reply: str
-    messages: List[ChatMessageResponse]
+    user_message: ChatMessageResponse
+    assistant_message: ChatMessageResponse
 
 
 class ChatResetResponse(BaseModel):
     success: bool
-    participant_id: str
+    prolific_id: str
     condition_key: ConditionKey
     messages: List[ChatMessageResponse]
