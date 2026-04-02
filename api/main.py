@@ -117,7 +117,11 @@ async def submit_survey1(survey_data: Survey1Request):
                 block_doc["opinion"] = br.opinion
                 block_doc["opinion_reason"] = br.opinion_reason
                 block_doc["statements"] = [
-                    {"statement_id": s.statement_id, "response": s.response}
+                    {
+                        "statement_id": s.statement_id,
+                        "statement_text": s.statement_text,
+                        "response": s.response,
+                    }
                     for s in (br.statements or [])
                 ]
                 block_doc["feeling_strength"] = br.feeling_strength
