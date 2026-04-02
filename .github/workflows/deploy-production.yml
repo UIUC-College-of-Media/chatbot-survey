@@ -20,6 +20,17 @@ env:
   K8S_INGRESS_HOST: ${{ vars.K8S_INGRESS_HOST || 'chatbot-survey.example.com' }}
   GHCR_BACKEND_IMAGE: ${{ vars.GHCR_BACKEND_IMAGE || format('ghcr.io/{0}/chatbot-survey-backend', github.repository_owner) }}
   GHCR_FRONTEND_IMAGE: ${{ vars.GHCR_FRONTEND_IMAGE || format('ghcr.io/{0}/chatbot-survey-frontend', github.repository_owner) }}
+  APP_DATABASE_NAME: ${{ vars.APP_DATABASE_NAME || 'persuasive_ai_study' }}
+  APP_ALLOWED_ORIGINS: ${{ vars.APP_ALLOWED_ORIGINS || format('https://{0}', vars.K8S_INGRESS_HOST || 'chatbot-survey.example.com') }}
+  AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+  AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+  KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+  MONGODB_URL: ${{ secrets.MONGODB_URL }}
+  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+  GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+  TLS_CERT: ${{ secrets.TLS_CERT }}
+  TLS_KEY: ${{ secrets.TLS_KEY }}
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -69,27 +80,20 @@ jobs:
           mkdir -p "$HOME/.kube"
           printf '%s' "${KUBE_CONFIG}" > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
-        env:
-          KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
 
       - name: Ensure namespace exists
         run: |
           kubectl create namespace "${K8S_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Create GHCR pull secret (if configured)
-        if: ${{ secrets.GHCR_PULL_USERNAME != '' && secrets.GHCR_PULL_TOKEN != '' }}
         run: |
           kubectl -n "${K8S_NAMESPACE}" create secret docker-registry ghcr-pull-secret \
             --docker-server=ghcr.io \
             --docker-username="${GHCR_PULL_USERNAME}" \
             --docker-password="${GHCR_PULL_TOKEN}" \
             --dry-run=client -o yaml | kubectl apply -f -
-        env:
-          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
 
       - name: Create TLS secret (if configured)
-        if: ${{ secrets.TLS_CERT != '' && secrets.TLS_KEY != '' }}
         run: |
           printf '%s\n' "${TLS_CERT}" > /tmp/tls.crt
           printf '%s\n' "${TLS_KEY}" > /tmp/tls.key
@@ -97,9 +101,6 @@ jobs:
             --cert=/tmp/tls.crt \
             --key=/tmp/tls.key \
             --dry-run=client -o yaml | kubectl apply -f -
-        env:
-          TLS_CERT: ${{ secrets.TLS_CERT }}
-          TLS_KEY: ${{ secrets.TLS_KEY }}
 
       - name: Render production env files
         run: |
@@ -117,13 +118,6 @@ jobs:
           AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
           MONGODB_URL=${MONGODB_URL}
           EOF
-        env:
-          APP_DATABASE_NAME: ${{ vars.APP_DATABASE_NAME || 'persuasive_ai_study' }}
-          APP_ALLOWED_ORIGINS: ${{ vars.APP_ALLOWED_ORIGINS || format('https://{0}', vars.K8S_INGRESS_HOST || 'chatbot-survey.example.com') }}
-          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
-          AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
-          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-          MONGODB_URL: ${{ secrets.MONGODB_URL }}
 
       - name: Pin image tags and ingress host
         run: |
