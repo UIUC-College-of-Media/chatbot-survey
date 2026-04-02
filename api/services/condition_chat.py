@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -92,7 +91,7 @@ CONDITIONS: dict[ConditionKey, ConditionDefinition] = {
 
 @dataclass
 class ChatSession:
-    participant_id: str
+    prolific_id: str
     condition_key: ConditionKey
     condition_label: str
     topic: str
@@ -101,10 +100,6 @@ class ChatSession:
     messages: list[dict]
     created_at: datetime
     updated_at: datetime
-
-
-_sessions: dict[tuple[str, ConditionKey], ChatSession] = {}
-_sessions_lock = asyncio.Lock()
 
 
 def condition_metadata() -> list[dict]:
@@ -192,8 +187,8 @@ def _initial_greeting(definition: ConditionDefinition) -> str:
     return f"Hello. We will discuss: {definition.statement}"
 
 
-async def initialize_chat_session(
-    participant_id: str,
+def initialize_chat_session(
+    prolific_id: str,
     condition_key: str,
     user_answer: int | None,
     argument: str | None,
@@ -201,8 +196,8 @@ async def initialize_chat_session(
     definition = _require_condition(condition_key)
     prompt = _build_prompt(definition, user_answer, argument)
     now = datetime.now(UTC)
-    session = ChatSession(
-        participant_id=participant_id,
+    return ChatSession(
+        prolific_id=prolific_id,
         condition_key=definition.key,
         condition_label=definition.label,
         topic=definition.topic,
@@ -219,36 +214,8 @@ async def initialize_chat_session(
         updated_at=now,
     )
 
-    async with _sessions_lock:
-        _sessions[(participant_id, definition.key)] = session
 
-    return session
-
-
-async def list_participant_sessions(participant_id: str) -> list[ChatSession]:
-    async with _sessions_lock:
-        return [
-            session
-            for (pid, _), session in _sessions.items()
-            if pid == participant_id
-        ]
-
-
-async def get_chat_session(participant_id: str, condition_key: str) -> ChatSession:
-    definition = _require_condition(condition_key)
-    async with _sessions_lock:
-        session = _sessions.get((participant_id, definition.key))
-
-    if session is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chat session not initialized for this condition",
-        )
-    return session
-
-
-async def clear_chat_session(participant_id: str, condition_key: str) -> ChatSession:
-    session = await get_chat_session(participant_id, condition_key)
+def clear_chat_session(session: ChatSession) -> ChatSession:
     now = datetime.now(UTC)
     session.messages = [
         {
@@ -258,23 +225,15 @@ async def clear_chat_session(participant_id: str, condition_key: str) -> ChatSes
         }
     ]
     session.updated_at = now
-    async with _sessions_lock:
-        _sessions[(participant_id, session.condition_key)] = session
     return session
 
 
-async def append_and_generate(
-    participant_id: str,
-    condition_key: str,
-    message: str,
-) -> ChatSession:
-    session = await get_chat_session(participant_id, condition_key)
-
+async def append_and_generate(session: ChatSession, message: str) -> ChatSession:
     now = datetime.now(UTC)
     session.messages.append({"role": "user", "content": message, "created_at": now})
 
     assistant_reply = await generate_chat_reply(
-        participant_id=participant_id,
+        participant_id=session.prolific_id,
         system_prompt=session.system_prompt,
         messages=[
             {"role": msg["role"], "content": msg["content"]}
@@ -290,8 +249,4 @@ async def append_and_generate(
         }
     )
     session.updated_at = datetime.now(UTC)
-
-    async with _sessions_lock:
-        _sessions[(participant_id, session.condition_key)] = session
-
     return session

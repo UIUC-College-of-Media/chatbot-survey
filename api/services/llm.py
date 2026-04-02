@@ -1,7 +1,8 @@
 import asyncio
-import os
 from functools import lru_cache
 from typing import Any
+
+from api.config import get_settings
 
 
 # One OpenAI client instance per process
@@ -31,11 +32,15 @@ async def generate_chat_reply(
     messages: list[dict],
 ) -> str:
     """Generate a chat reply using Azure OpenAI when configured, otherwise return a local mock reply."""
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "").strip().rstrip("/")
-    api_key = os.getenv("AZURE_OPENAI_API_KEY", "").strip()
-    deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "").strip()
+    settings = get_settings()
+    endpoint = settings.azure_openai_endpoint.strip().rstrip("/")
+    api_key = settings.azure_openai_api_key.strip()
+    deployment = settings.azure_openai_deployment.strip()
 
     if not endpoint or not api_key or not deployment:
+        if settings.app_env == "production":
+            raise RuntimeError("Azure OpenAI configuration is required in production")
+
         latest_user_message = next(
             (msg["content"] for msg in reversed(messages) if msg.get("role") == "user"),
             "",

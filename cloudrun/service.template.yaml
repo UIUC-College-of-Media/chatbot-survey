@@ -1,0 +1,53 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${CLOUDRUN_SERVICE_NAME}
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/container-dependencies: '{"frontend":["backend"]}'
+    spec:
+      containerConcurrency: 10
+      timeoutSeconds: 60
+      containers:
+        - name: frontend
+          image: ${CLOUDRUN_REGION}-docker.pkg.dev/${GCP_PROJECT}/${ARTIFACT_REGISTRY_REPOSITORY}/chatbot-survey-frontend:${FRONTEND_IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            tcpSocket:
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 12
+        - name: backend
+          image: ${CLOUDRUN_REGION}-docker.pkg.dev/${GCP_PROJECT}/${ARTIFACT_REGISTRY_REPOSITORY}/chatbot-survey-api:${BACKEND_IMAGE_TAG}
+          env:
+            - name: APP_ENV
+              value: "${APP_ENV}"
+            - name: DATABASE_NAME
+              value: "${DATABASE_NAME}"
+            - name: AZURE_OPENAI_ENDPOINT
+              value: "${AZURE_OPENAI_ENDPOINT}"
+            - name: AZURE_OPENAI_API_KEY
+              value: "${AZURE_OPENAI_API_KEY}"
+            - name: AZURE_OPENAI_DEPLOYMENT
+              value: "${AZURE_OPENAI_DEPLOYMENT}"
+            - name: MONGODB_URL
+              value: "${MONGODB_URL}"
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /livez
+              port: 8000
+            periodSeconds: 5
+            failureThreshold: 12
