@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: chatbot-survey
+resources:
+  - ../../base
+  - namespace.yaml
+  - ingress.yaml
+patches:
+  - path: backend-deployment-patch.yaml
+  - path: frontend-deployment-patch.yaml
+  - path: mongodb-statefulset-delete.yaml
+  - path: mongodb-service-delete.yaml
+  - path: mongodb-pvc-delete.yaml
+configMapGenerator:
+  - name: backend-config
+    envs:
+      - config/backend.production.env
+secretGenerator:
+  - name: backend-secret
+    envs:
+      - secrets/backend.production.env
+generatorOptions:
+  disableNameSuffixHash: true
