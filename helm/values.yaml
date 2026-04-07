@@ -1,0 +1,41 @@
+backend:
+  image:
+    repository: ghcr.io/uiuc-college-of-media/chatbot-survey-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8000
+  env:
+    appEnv: development
+    mongodbUrl: "mongodb://mongodb:27017"
+    databaseName: persuasive_ai_study
+    allowedOrigins: "*"
+    azureOpenaiEndpoint: ""
+    azureOpenaiApiKey: ""
+    azureOpenaiDeployment: ""
+
+frontend:
+  image:
+    repository: ghcr.io/uiuc-college-of-media/chatbot-survey-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8080
+  env:
+    backendUrl: "http://backend:8000"
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  # annotations:
+  #   kubernetes.io/ingress.class: nginx
+  #   cert-manager.io/cluster-issuer: letsencrypt-prod
+
+mongodb:
+  image:
+    repository: mongo
+    tag: "7"
+    pullPolicy: IfNotPresent
+  port: 27017
