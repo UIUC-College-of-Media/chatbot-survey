@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+    {{- include "chatbot-survey.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.backend.port }}
+          env:
+            - name: APP_ENV
+              value: {{ .Values.backend.env.appEnv | quote }}
+            - name: MONGODB_URL
+              value: {{ .Values.backend.env.mongodbUrl | quote }}
+            - name: DATABASE_NAME
+              value: {{ .Values.backend.env.databaseName | quote }}
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.backend.env.allowedOrigins | quote }}
+            - name: AZURE_OPENAI_ENDPOINT
+              value: {{ .Values.backend.env.azureOpenaiEndpoint | quote }}
+            - name: AZURE_OPENAI_API_KEY
+              value: {{ .Values.backend.env.azureOpenaiApiKey | quote }}
+            - name: AZURE_OPENAI_DEPLOYMENT
+              value: {{ .Values.backend.env.azureOpenaiDeployment | quote }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: {{ .Values.backend.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
