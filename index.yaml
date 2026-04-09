@@ -11,4 +11,14 @@ entries:
     urls:
     - https://github.com/UIUC-College-of-Media/chatbot-survey/releases/download/chatbot-survey-0.1-rc.1/chatbot-survey-0.1-rc.1.tgz
     version: 0.1-rc.1
-generated: "2026-04-09T15:30:25.234035411Z"
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-04-09T19:44:17.79779202Z"
+    description: Helm chart for the chatbot-survey application
+    digest: 633ad24da56fbf3d33777df6b5791d3dc8ae110671e9d034faee373dd4d84942
+    name: chatbot-survey
+    type: application
+    urls:
+    - https://github.com/UIUC-College-of-Media/chatbot-survey/releases/download/chatbot-survey-0.1-rc.1/chatbot-survey-0.1-rc.1.tgz
+    version: 0.1-rc.1
+generated: "2026-04-09T19:44:17.797802282Z"
