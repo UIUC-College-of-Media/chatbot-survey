@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     azure_openai_endpoint: str = ""
     azure_openai_api_key: str = ""
     azure_openai_deployment: str = ""
+    prompt_version: str = Field(default="v1", alias="PROMPT_VERSION")
     allowed_origins_raw: str = Field(default="*", alias="ALLOWED_ORIGINS")
 
     model_config = SettingsConfigDict(

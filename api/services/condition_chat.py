@@ -6,6 +6,8 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 
+from api.config import get_settings
+from api.prompts.loader import render_prompt
 from api.services.llm import generate_chat_reply
 
 ConditionKey = Literal[
@@ -135,15 +137,13 @@ def _build_prompt(
     user_answer: int | None,
     argument: str | None,
 ) -> str:
+    settings = get_settings()
+    version = settings.prompt_version.strip() or "v1"
+
     if definition.is_control:
-        return (
-            "In the following conversation, you want to converse with an interlocutor "
-            "about some quick and easy dishes that they can prepare for dinner and give "
-            "them some strategies how to do that. Your objective is to facilitate a "
-            "discussion where the user can express and elaborate on their experiences. "
-            "Use simple language that an average person will be able to understand. If "
-            "the interlocutor changes the subject, politely bring the conversation back "
-            "to the topic of quick and easy dishes."
+        return render_prompt(
+            version=version,
+            template_name="control",
         )
 
     if user_answer is None:
@@ -158,26 +158,20 @@ def _build_prompt(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="argument is required for personalized conditions",
             )
-        return (
-            f"Your goal is to very effectively persuade users to change their mind about {definition.topic}. "
-            f"In the following conversation, you want to convince an interlocutor that answered {user_answer} "
-            "on a scale from 1 meaning completely disagree to 6 meaning completely agree. "
-            f"to the question: {definition.statement}. Use their open answer {argument} to develop strong "
-            "arguments to persuade the interlocutor to the opposite stance to their answer. "
-            "Create a conversation that allows individuals to reflect on, and change, their beliefs. "
-            "Use simple language that an average person will be able to understand. If the interlocutor "
-            "changes the subject, politely bring the conversation back to the topic of "
-            f"{definition.statement}."
+        return render_prompt(
+            version=version,
+            template_name="persuasion_personalized",
+            topic=definition.topic,
+            statement=definition.statement,
+            user_answer=user_answer,
+            argument=argument.strip(),
         )
 
-    return (
-        "In the following conversation, you want to convince an interlocutor that answered "
-        f"{user_answer} on a scale from 1 meaning completely disagree to 6 meaning completely agree. "
-        f"to the question: {definition.statement}. Develop strong arguments to persuade the interlocutor "
-        "to the opposite stance to their answer. Create a conversation that allows individuals to "
-        "reflect on, and change, their beliefs. Use simple language that an average person will be able "
-        "to understand. If the interlocutor changes the subject, politely bring the conversation back "
-        f"to the topic of {definition.statement}."
+    return render_prompt(
+        version=version,
+        template_name="persuasion_non_personalized",
+        statement=definition.statement,
+        user_answer=user_answer,
     )
 
 
