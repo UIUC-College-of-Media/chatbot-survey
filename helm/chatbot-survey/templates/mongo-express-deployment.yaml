@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-express
+  labels:
+    app: mongo-express
+    {{- include "chatbot-survey.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.mongoExpress.replicas }}
+  selector:
+    matchLabels:
+      app: mongo-express
+  template:
+    metadata:
+      labels:
+        app: mongo-express
+    spec:
+      containers:
+        - name: mongo-express
+          image: "{{ .Values.mongoExpress.image.repository }}:{{ .Values.mongoExpress.image.tag }}"
+          imagePullPolicy: {{ .Values.mongoExpress.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.mongoExpress.port }}
+          env:
+            - name: ME_CONFIG_MONGODB_URL
+              value: {{ .Values.backend.env.mongodbUrl | quote }}
+            - name: ME_CONFIG_BASICAUTH_ENABLED
+              value: {{ .Values.mongoExpress.basicAuth.enabled | toString | quote }}
+            - name: ME_CONFIG_BASICAUTH_USERNAME
+              value: {{ .Values.mongoExpress.basicAuth.username | quote }}
+            - name: ME_CONFIG_BASICAUTH_PASSWORD
+              value: {{ .Values.mongoExpress.basicAuth.password | quote }}
+            - name: ME_CONFIG_SITE_SESSION_SECRET
+              value: {{ .Values.mongoExpress.sessionSecret | quote }}
+            - name: ME_CONFIG_SITE_COOKIESECRET
+              value: {{ .Values.mongoExpress.cookieSecret | quote }}
