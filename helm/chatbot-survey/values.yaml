@@ -44,6 +44,7 @@ mongoExpress:
     pullPolicy: IfNotPresent
   replicas: 1
   port: 8081
+  path: /mongo-express
   sessionSecret: "changeme"
   cookieSecret: "changeme2"
   basicAuth:

@@ -34,3 +34,5 @@ spec:
               value: {{ .Values.mongoExpress.sessionSecret | quote }}
             - name: ME_CONFIG_SITE_COOKIESECRET
               value: {{ .Values.mongoExpress.cookieSecret | quote }}
+            - name: ME_CONFIG_SITE_BASEURL
+              value: {{ .Values.mongoExpress.path | quote }}
