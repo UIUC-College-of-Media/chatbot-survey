@@ -39,3 +39,17 @@ mongodb:
     tag: "7"
     pullPolicy: IfNotPresent
   port: 27017
+
+mongoExpress:
+  image:
+    repository: bengal1/mongo-express
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8081
+  sessionSecret: "changeme"
+  cookieSecret: "changeme2"
+  basicAuth:
+    enabled: false
+    username: ""
+    password: ""
