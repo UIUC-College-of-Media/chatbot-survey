@@ -5,7 +5,7 @@ NAMESPACE ?= chatbot-survey-local
 LOCAL_PROLIFIC_ID ?= prolific-001
 ROLLOUT_TIMEOUT ?= 120s
 
-.PHONY: help kind-up kind-down kind-build kind-load kind-build-backend kind-build-frontend kind-load-backend kind-load-frontend kind-deploy kind-apply kind-wait kind-wait-backend kind-wait-frontend kind-restart-backend kind-restart-frontend kind-refresh-backend kind-refresh-frontend kind-refresh kind-seed kind-status kind-bootstrap local-url cloudrun-render cloudrun-build-backend cloudrun-build-frontend cloudrun-deploy
+.PHONY: help kind-up kind-down kind-build kind-load kind-build-backend kind-build-frontend kind-load-backend kind-load-frontend kind-deploy kind-apply kind-wait kind-wait-backend kind-wait-frontend kind-restart-backend kind-restart-frontend kind-refresh-backend kind-refresh-frontend kind-refresh kind-seed kind-status kind-bootstrap kind-port-forward local-url cloudrun-render cloudrun-build-backend cloudrun-build-frontend cloudrun-deploy
 
 help:
 	@echo "Available targets:"
@@ -22,7 +22,8 @@ help:
 	@echo "  make kind-wait       # Wait for backend/frontend/mongodb rollout"
 	@echo "  make kind-seed       # Submit a sample Survey1 payload"
 	@echo "  make kind-status     # Show pods/services in local namespace"
-	@echo "  make kind-bootstrap  # Run full local bootstrap (up+build+load+deploy+wait+seed)"
+	@echo "  make kind-bootstrap    # Run full local bootstrap (up+build+load+deploy+wait+seed+port-forward)"
+	@echo "  make kind-port-forward # Port-forward MongoDB to localhost:27017"
 	@echo "  make local-url       # Print browser URL"
 	@echo "  make kind-down       # Delete kind cluster"
 	@echo "  make cloudrun-render # Render Cloud Run YAML from cloudrun/deploy.env"
@@ -106,7 +107,11 @@ kind-status:
 	kubectl -n $(NAMESPACE) get pods
 	kubectl -n $(NAMESPACE) get svc
 
-kind-bootstrap: kind-up kind-build kind-load kind-deploy kind-wait kind-seed
+kind-port-forward:
+	nohup kubectl -n $(NAMESPACE) port-forward statefulset/mongodb 27017:27017 > /tmp/mongodb-port-forward.log 2>&1 &
+	@echo "MongoDB port-forward running (log: /tmp/mongodb-port-forward.log)"
+
+kind-bootstrap: kind-up kind-build kind-load kind-deploy kind-wait kind-seed kind-port-forward
 	@echo "Local setup ready."
 
 local-url:
