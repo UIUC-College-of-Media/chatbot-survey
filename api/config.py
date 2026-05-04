@@ -9,9 +9,6 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     mongodb_url: str = "mongodb://localhost:27017"
     database_name: str = "persuasive_ai_study"
-    azure_openai_endpoint: str = ""
-    azure_openai_api_key: str = ""
-    azure_openai_deployment: str = ""
     allowed_origins_raw: str = Field(default="*", alias="ALLOWED_ORIGINS")
 
     model_config = SettingsConfigDict(
@@ -38,9 +35,6 @@ class Settings(BaseSettings):
         for field_name in (
             "mongodb_url",
             "database_name",
-            "azure_openai_endpoint",
-            "azure_openai_api_key",
-            "azure_openai_deployment",
         ):
             if not getattr(self, field_name, "").strip():
                 missing_fields.append(field_name.upper())

@@ -10,7 +10,8 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from api.config import get_settings
-from api.models import ChatMessage, ChatSessionDocument, Survey1Document
+from api.models import ChatMessage, ChatSessionDocument, LLMConfigDocument, Survey1Document
+from api.services.llm_config_cache import get_llm_config
 from api.schema.chat import (
     ChatResetResponse,
     ChatSendRequest,
@@ -52,7 +53,7 @@ async def init_database() -> None:
     _db = _client[settings.database_name]
     await init_beanie(
         database=_db,
-        document_models=[Survey1Document, ChatSessionDocument],
+        document_models=[Survey1Document, ChatSessionDocument, LLMConfigDocument],
     )
 
 
@@ -74,6 +75,10 @@ def get_database():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_database()
+    try:
+        await get_llm_config()  # warm cache at startup, non-fatal if not configured yet
+    except RuntimeError:
+        pass
     try:
         yield
     finally:

@@ -233,7 +233,6 @@ async def append_and_generate(session: ChatSession, message: str) -> ChatSession
     session.messages.append({"role": "user", "content": message, "created_at": now})
 
     assistant_reply = await generate_chat_reply(
-        participant_id=session.prolific_id,
         system_prompt=session.system_prompt,
         messages=[
             {"role": msg["role"], "content": msg["content"]}
