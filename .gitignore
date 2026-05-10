@@ -138,6 +138,10 @@ celerybeat.pid
 .env
 .envrc
 .venv
+cloudrun/deploy.env
+cloudrun/service.yaml
+k8s/overlays/production/config/*.env
+k8s/overlays/production/secrets/*.env
 env/
 venv/
 ENV/
