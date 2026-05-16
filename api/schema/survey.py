@@ -106,6 +106,25 @@ class Demographics(BaseModel):
         le=6,
         description="Selected position on the bipolar scale (1 toward left pole, 6 toward right); from SelectedAnswerRecode when available",
     )
+    ai_chatbot_usage_frequency: Optional[str] = Field(
+        None,
+        description="How often participant uses AI chatbots (QID106, single-select)",
+    )
+    ai_chatbot_started_using: Optional[str] = Field(
+        None,
+        description="When participant first started using AI chatbots (QID107, single-select)",
+    )
+    chatbot_role_perception: Optional[List[str]] = Field(
+        None,
+        max_length=3,
+        description=(
+            "How participant thinks of chatbots they use (QID108, multi-select; up to 3 options)"
+        ),
+    )
+    chatbot_role_perception_other: Optional[str] = Field(
+        None,
+        description="Free-text response for 'chatbot as something else' (QID109)",
+    )
 
 
 class Survey1Request(BaseModel):
