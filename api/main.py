@@ -19,7 +19,7 @@ from api.schema.chat import (
     ChatSessionResponse,
     ConditionsResponse,
 )
-from api.schema.survey import Survey1Request, Survey1Response, Survey3Request, Survey3Response
+from api.schema.survey import Survey1GetResponse, Survey1Request, Survey1Response, Survey3Request, Survey3Response
 from api.services.condition_chat import (
     append_and_generate,
     clear_chat_session,
@@ -215,6 +215,25 @@ async def submit_survey1(survey_data: Survey1Request):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to store survey response: {str(e)}",
         )
+
+
+@app.get("/api/v1/survey1/data", response_model=Survey1GetResponse)
+async def get_survey1_data(
+    prolific_id: str = Query(..., description="Prolific participant ID"),
+):
+    """Return the pre-block metadata (topic, personalization, is_control) for a Survey 1 participant."""
+    survey = await Survey1Document.find_one({"prolific_id": prolific_id})
+    if survey is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No Survey 1 response found for this prolific_id",
+        )
+    pre_block = survey.pre_block
+    return Survey1GetResponse(
+        topic=pre_block.topic if pre_block else None,
+        personalization=pre_block.personalization if pre_block else None,
+        is_control=pre_block.is_control if pre_block else None,
+    )
 
 
 def _derive_condition_key(

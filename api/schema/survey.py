@@ -148,6 +148,14 @@ class Survey1Response(BaseModel):
     timestamp: datetime
 
 
+class Survey1GetResponse(BaseModel):
+    """Response model for fetching Survey 1 response data by prolific_id"""
+
+    topic: str | None
+    personalization: str | None
+    is_control: bool | None
+
+
 class Survey3Item(BaseModel):
     """Individual Survey 3 item response (6-point Likert scale)"""
 
