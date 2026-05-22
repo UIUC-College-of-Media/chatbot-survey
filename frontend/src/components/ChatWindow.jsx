@@ -15,6 +15,7 @@ export default function ChatWindow({ prolificId, initialSession }) {
 
   useEffect(() => {
     scrollToBottom()
+    if (chatHistory) console.log('[ChatWindow] condition_label:', chatHistory.condition_label)
   }, [chatHistory])
 
   function scrollToBottom() {
@@ -76,9 +77,7 @@ export default function ChatWindow({ prolificId, initialSession }) {
       <div className="workspace-layout">
         <main className="panel">
           <div className="section">
-            {chatHistory
-              ? `${chatHistory.condition_label} | Topic: ${chatHistory.topic}`
-              : 'No active chat session.'}
+            {chatHistory ? `Topic: ${chatHistory.topic}` : 'No active chat session.'}
           </div>
           <div className="messages" ref={messagesRef}>
             {!chatHistory || !chatHistory.messages || chatHistory.messages.length === 0
