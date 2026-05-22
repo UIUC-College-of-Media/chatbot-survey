@@ -197,24 +197,32 @@ async def health_check():
     status_code=status.HTTP_201_CREATED,
 )
 async def submit_survey1(survey_data: Survey1Request):
-    """Submit Survey 1 responses from Qualtrics and store them in MongoDB."""
-    try:
-        document = Survey1Document.from_request(survey_data)
-        await document.insert()
-
-        return Survey1Response(
-            success=True,
-            message="Survey 1 response stored successfully",
-            participant_id=survey_data.participant_id,
-            survey_id=str(document.id) if document.id else "",
-            timestamp=datetime.now(UTC),
-        )
-
-    except Exception as e:
+    """Submit Survey 1 responses from Qualtrics. Idempotent on prolific_id."""
+    if not survey_data.prolific_id:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store survey response: {str(e)}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="prolific_id is required",
         )
+
+    prolific_id = survey_data.prolific_id
+    document = Survey1Document.from_request(survey_data)
+    doc_dict = document.model_dump(exclude={"id"})
+
+    collection = Survey1Document.get_motor_collection()
+    result = await collection.find_one_and_update(
+        {"prolific_id": prolific_id},
+        {"$set": doc_dict},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
+    )
+
+    return Survey1Response(
+        success=True,
+        message="Survey 1 response stored successfully",
+        participant_id=result.get("participant_id", survey_data.participant_id),
+        survey_id=str(result.get("_id", "")),
+        timestamp=result.get("created_at", datetime.now(UTC)),
+    )
 
 
 @app.get("/api/v1/survey1/data", response_model=Survey1GetResponse)
