@@ -251,7 +251,7 @@ def _derive_condition_key(
 ) -> str:
     if pre_is_control or pre_personalization == "control":
         return "control"
-    prefix = {"teams": "teams", "plastic": "plastic", "pe_mandatory": "pe"}.get(pre_topic or "")
+    prefix = {"teams": "teams", "plastic_ban": "plastic", "pe_mandatory": "pe"}.get(pre_topic or "")
     if not prefix:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
