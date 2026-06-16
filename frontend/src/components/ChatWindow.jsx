@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchJson } from '../api'
+import { fetchJson, fetchStream } from '../api'
 import MessageInput from './MessageInput'
 
 export default function ChatWindow({ prolificId, initialSession }) {
@@ -7,6 +7,7 @@ export default function ChatWindow({ prolificId, initialSession }) {
   const [status, setStatus] = useState('')
   const [statusError, setStatusError] = useState(false)
   const [sending, setSending] = useState(false)
+  const [streamingMessage, setStreamingMessage] = useState(null)
   const messagesRef = useRef(null)
 
   useEffect(() => {
@@ -17,6 +18,10 @@ export default function ChatWindow({ prolificId, initialSession }) {
     scrollToBottom()
     if (chatHistory) console.log('[ChatWindow] condition_label:', chatHistory.condition_label)
   }, [chatHistory])
+
+  useEffect(() => {
+    if (streamingMessage !== null) scrollToBottom()
+  }, [streamingMessage])
 
   function scrollToBottom() {
     setTimeout(() => {
@@ -43,30 +48,35 @@ export default function ChatWindow({ prolificId, initialSession }) {
   async function onSend(text) {
     if (sending || !chatHistory) return
     setSending(true)
-    showStatus('Waiting for assistant reply...')
-    const clientMessageId = typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    setStreamingMessage('')
+    showStatus('Assistant is typing...')
+    const clientMessageId = crypto.randomUUID()
+    // optimistically append user message to chat history first
+    setChatHistory((prev) => prev
+      ? { ...prev, messages: [...(prev.messages || []), { role: 'user', content: text }] }
+      : prev)
     try {
-      const body = await fetchJson('/api/v1/chat/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prolific_id: prolificId,
-          message: text,
-          client_message_id: clientMessageId
-        })
-      })
-      setChatHistory((prev) => {
-        if (!prev) return prev
-        return {
-          ...prev,
-          messages: [...(prev.messages || []), body.user_message, body.assistant_message]
-        }
-      })
-      showStatus('')
+      await fetchStream(
+        '/api/v1/chat/stream',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prolific_id: prolificId, message: text, client_message_id: clientMessageId }),
+        },
+        (chunk) => setStreamingMessage((prev) => prev + chunk),
+        (doneEvent) => {
+          setChatHistory((prev) => prev
+            ? { ...prev, messages: [...(prev.messages || []).slice(0, -1), doneEvent.user_message, doneEvent.assistant_message] }
+            : prev)
+          setStreamingMessage(null)
+          showStatus('')
+        },
+        (err) => { showStatus(String(err.message || err), true); setStreamingMessage(null); loadHistory() },
+      )
     } catch (err) {
       showStatus(String(err.message || err), true)
+      setStreamingMessage(null)
+      loadHistory()
     } finally {
       setSending(false)
     }
@@ -88,6 +98,11 @@ export default function ChatWindow({ prolificId, initialSession }) {
                 </div>
               ))
             }
+            {streamingMessage !== null && (
+              <div className="msg assistant streaming">
+                <strong>assistant</strong><br />{streamingMessage}<span className="cursor">▌</span>
+              </div>
+            )}
           </div>
           <div className={`status${statusError ? ' error' : ''}`}>{status}</div>
           <MessageInput

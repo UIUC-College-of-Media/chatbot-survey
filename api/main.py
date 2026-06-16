@@ -1,3 +1,4 @@
+import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
@@ -6,6 +7,7 @@ from beanie import init_beanie
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -142,6 +144,10 @@ def _to_chat_session_response(session: ChatSessionDocument) -> ChatSessionRespon
         statement=session.statement,
         messages=[msg.model_dump() for msg in session.messages],
     )
+
+
+def _sse(data: dict) -> str:
+    return f"data: {json.dumps(data, default=str)}\n\n"
 
 
 def _to_chat_send_response(
@@ -423,6 +429,130 @@ async def send_chat_message(payload: ChatSendRequest):
         )
     finally:
         await _release_inflight(payload.prolific_id, request_id)
+
+
+@app.post("/api/v1/chat/stream")
+async def stream_chat_message(payload: ChatSendRequest):
+    from api.services.llm import stream_chat_reply
+
+    request_id = payload.client_message_id
+
+    # Pre-lock idempotency check
+    doc = await ChatSessionDocument.find_one({"prolific_id": payload.prolific_id})
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat session not initialized for this participant",
+        )
+
+    if (
+        doc.last_client_message_id == request_id
+        and doc.last_user_message is not None
+        and doc.last_assistant_message is not None
+    ):
+        async def _replay():
+            yield _sse({
+                "done": True,
+                "user_message": doc.last_user_message.model_dump(mode="json"),
+                "assistant_message": doc.last_assistant_message.model_dump(mode="json"),
+            })
+        return StreamingResponse(_replay(), media_type="text/event-stream")
+
+    acquired = await _acquire_inflight(payload.prolific_id, request_id)
+    if not acquired:
+        latest = await ChatSessionDocument.find_one({"prolific_id": payload.prolific_id})
+        if (
+            latest is not None
+            and latest.last_client_message_id == request_id
+            and latest.last_user_message is not None
+            and latest.last_assistant_message is not None
+        ):
+            async def _replay2():
+                yield _sse({
+                    "done": True,
+                    "user_message": latest.last_user_message.model_dump(mode="json"),
+                    "assistant_message": latest.last_assistant_message.model_dump(mode="json"),
+                })
+            return StreamingResponse(_replay2(), media_type="text/event-stream")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A response is already being generated for this participant",
+        )
+
+    # Lock acquired — any exception before returning StreamingResponse must release the lock
+    try:
+        doc = await ChatSessionDocument.find_one({"prolific_id": payload.prolific_id})
+        if doc is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not initialized for this participant",
+            )
+
+        if (
+            doc.last_client_message_id == request_id
+            and doc.last_user_message is not None
+            and doc.last_assistant_message is not None
+        ):
+            await _release_inflight(payload.prolific_id, request_id)
+            async def _replay3():
+                yield _sse({
+                    "done": True,
+                    "user_message": doc.last_user_message.model_dump(mode="json"),
+                    "assistant_message": doc.last_assistant_message.model_dump(mode="json"),
+                })
+            return StreamingResponse(_replay3(), media_type="text/event-stream")
+
+        now = datetime.now(UTC)
+        user_msg = ChatMessage(role="user", content=payload.message, created_at=now)
+        doc.messages.append(user_msg)
+        doc.updated_at = now
+        doc.last_client_message_id = request_id
+        doc.last_user_message = user_msg
+        await doc.save()
+
+        messages_for_llm = [{"role": m.role, "content": m.content} for m in doc.messages]
+        system_prompt = doc.system_prompt
+
+    except HTTPException:
+        await _release_inflight(payload.prolific_id, request_id)
+        raise
+    except Exception as e:
+        await _release_inflight(payload.prolific_id, request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to prepare stream: {str(e)}",
+        )
+
+    async def _generate():
+        accumulated = []
+        try:
+            async for token in stream_chat_reply(system_prompt, messages_for_llm):
+                accumulated.append(token)
+                yield _sse({"chunk": token})
+
+            assistant_content = "".join(accumulated)
+            if not assistant_content:
+                yield _sse({"error": "LLM returned empty assistant content"})
+                return
+
+            finished_at = datetime.now(UTC)
+            assistant_msg = ChatMessage(role="assistant", content=assistant_content, created_at=finished_at)
+            doc.messages.append(assistant_msg)
+            doc.updated_at = finished_at
+            doc.last_assistant_message = assistant_msg
+            await doc.save()
+
+            yield _sse({
+                "done": True,
+                "user_message": user_msg.model_dump(mode="json"),
+                "assistant_message": assistant_msg.model_dump(mode="json"),
+            })
+        except Exception as exc:
+            yield _sse({"error": str(exc)})
+        finally:
+            await _release_inflight(payload.prolific_id, request_id)
+
+    return StreamingResponse(_generate(), media_type="text/event-stream")
 
 
 @app.post(
