@@ -218,52 +218,6 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(first.json()["prolific_id"], "prolific-abc")
         self.assertEqual(second.json()["prolific_id"], "prolific-abc")
 
-    @patch("api.main._release_inflight", new_callable=AsyncMock)
-    @patch("api.main._acquire_inflight", new_callable=AsyncMock)
-    @patch("api.main.append_and_generate", new_callable=AsyncMock)
-    @patch("api.main.ChatSessionDocument.find_one", new_callable=AsyncMock)
-    def test_send_message_returns_reply_and_updates_session(
-        self,
-        mock_find_one,
-        mock_append_and_generate,
-        mock_acquire_inflight,
-        _mock_release_inflight,
-    ):
-        doc = _FakeChatDoc("prolific-abc", "teams_non_personalized")
-        doc.save = AsyncMock(return_value=doc)
-        mock_find_one.side_effect = [doc, doc]
-        mock_acquire_inflight.return_value = True
-
-        updated = types.SimpleNamespace(
-            prolific_id="prolific-abc",
-            condition_key="teams_non_personalized",
-            condition_label="MS Teams (Non-personalized)",
-            topic="MS Teams",
-            statement="MS Teams is the most effective collaboration app on the market",
-            system_prompt="prompt",
-            messages=[
-                {"role": "assistant", "content": "Hello", "created_at": datetime.utcnow()},
-                {"role": "user", "content": "hello", "created_at": datetime.utcnow()},
-                {"role": "assistant", "content": "assistant reply", "created_at": datetime.utcnow()},
-            ],
-            updated_at=datetime.utcnow(),
-        )
-        mock_append_and_generate.return_value = updated
-        response = self.client.post(
-            "/api/v1/chat/send",
-            json={
-                "prolific_id": "prolific-abc",
-                "message": "hello",
-                "client_message_id": "msg-1",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["reply"], "assistant reply")
-        self.assertEqual(body["user_message"]["role"], "user")
-        self.assertEqual(body["assistant_message"]["role"], "assistant")
-
     @patch("api.main.ChatSessionDocument.from_service")
     @patch("api.main.ChatSessionDocument.find_one", new_callable=AsyncMock)
     def test_reset_clears_messages(self, mock_find_one, mock_from_service):
@@ -279,38 +233,6 @@ class TestAPI(unittest.TestCase):
         self.assertTrue(body["success"])
         self.assertEqual(body["prolific_id"], "prolific-abc")
         self.assertEqual(len(body["messages"]), 1)
-
-    @patch("api.main._release_inflight", new_callable=AsyncMock)
-    @patch("api.main._acquire_inflight", new_callable=AsyncMock)
-    @patch("api.main.append_and_generate", new_callable=AsyncMock)
-    @patch("api.main.ChatSessionDocument.find_one", new_callable=AsyncMock)
-    def test_send_message_with_same_client_message_id_is_idempotent(
-        self,
-        mock_find_one,
-        mock_append_and_generate,
-        mock_acquire_inflight,
-        _mock_release_inflight,
-    ):
-        doc = _FakeChatDoc("prolific-abc", "control")
-        doc.last_client_message_id = "msg-1"
-        doc.last_user_message = _FakeMessage("user", "hello")
-        doc.last_assistant_message = _FakeMessage("assistant", "assistant reply")
-        mock_find_one.return_value = doc
-        mock_acquire_inflight.return_value = True
-
-        response = self.client.post(
-            "/api/v1/chat/send",
-            json={
-                "prolific_id": "prolific-abc",
-                "message": "hello",
-                "client_message_id": "msg-1",
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
-        self.assertEqual(body["assistant_message"]["content"], "assistant reply")
-        mock_append_and_generate.assert_not_awaited()
 
 
 class TestSSEStream(unittest.TestCase):

@@ -56,14 +56,6 @@ class ChatSessionResponse(BaseModel):
     messages: List[ChatMessageResponse]
 
 
-class ChatSendResponse(BaseModel):
-    prolific_id: str
-    condition_key: ConditionKey
-    reply: str
-    user_message: ChatMessageResponse
-    assistant_message: ChatMessageResponse
-
-
 class ChatResetResponse(BaseModel):
     success: bool
     prolific_id: str

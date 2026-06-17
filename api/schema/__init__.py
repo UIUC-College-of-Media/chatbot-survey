@@ -2,7 +2,6 @@ from api.schema.chat import (
     ChatMessageResponse,
     ChatResetResponse,
     ChatSendRequest,
-    ChatSendResponse,
     ChatSessionResponse,
     ConditionDescriptor,
     ConditionsResponse,
@@ -26,6 +25,5 @@ __all__ = [
     "ChatSendRequest",
     "ChatMessageResponse",
     "ChatSessionResponse",
-    "ChatSendResponse",
     "ChatResetResponse",
 ]
