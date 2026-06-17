@@ -223,7 +223,7 @@ async def get_survey1_data(
     survey = await Survey1Document.find_one({"prolific_id": prolific_id})
     if survey is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No Survey 1 response found for this prolific_id",
         )
     pre_block = survey.pre_block
@@ -312,7 +312,7 @@ async def get_chat_session(prolific_id: str):
         doc = await ChatSessionDocument.find_one({"prolific_id": prolific_id})
         if doc is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Chat session not initialized for this participant",
             )
         return _to_chat_session_response(doc)
@@ -340,7 +340,7 @@ async def stream_chat_message(payload: ChatSendRequest):
     doc = await ChatSessionDocument.find_one({"prolific_id": payload.prolific_id})
     if doc is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Chat session not initialized for this participant",
         )
 
@@ -383,7 +383,7 @@ async def stream_chat_message(payload: ChatSendRequest):
         doc = await ChatSessionDocument.find_one({"prolific_id": payload.prolific_id})
         if doc is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Chat session not initialized for this participant",
             )
 
@@ -463,7 +463,7 @@ async def reset_chat_history(prolific_id: str):
         doc = await ChatSessionDocument.find_one({"prolific_id": prolific_id})
         if doc is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Chat session not initialized for this participant",
             )
 
