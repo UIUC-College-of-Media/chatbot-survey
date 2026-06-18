@@ -8,26 +8,37 @@ export default function ChatWindow({ prolificId, initialSession }) {
   const [statusError, setStatusError] = useState(false)
   const [sending, setSending] = useState(false)
   const [streamingMessage, setStreamingMessage] = useState(null)
+  const [hasSentMessage, setHasSentMessage] = useState(false)
   const messagesRef = useRef(null)
+  const scrollModeRef = useRef('none') // 'bottom' | 'top-user' | 'none'
+  const exchangeStartIdxRef = useRef(0)
 
   useEffect(() => {
     loadHistory()
   }, [prolificId])
 
   useEffect(() => {
-    scrollToBottom()
     if (chatHistory) console.log('[ChatWindow] condition_label:', chatHistory.condition_label)
+    const mode = scrollModeRef.current
+    scrollModeRef.current = 'none'
+    if (mode === 'bottom') {
+      setTimeout(() => {
+        if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight
+      }, 0)
+    } else if (mode === 'top-user') {
+      setTimeout(() => {
+        const container = messagesRef.current
+        if (!container) return
+        const userMsgs = container.querySelectorAll('.msg.user')
+        const last = userMsgs[userMsgs.length - 1]
+        if (last) {
+          const rect = last.getBoundingClientRect()
+          const containerRect = container.getBoundingClientRect()
+          container.scrollTop += rect.top - containerRect.top
+        }
+      }, 0)
+    }
   }, [chatHistory])
-
-  useEffect(() => {
-    if (streamingMessage !== null) scrollToBottom()
-  }, [streamingMessage])
-
-  function scrollToBottom() {
-    setTimeout(() => {
-      if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight
-    }, 0)
-  }
 
   function showStatus(text, isError = false) {
     setStatus(text)
@@ -37,6 +48,7 @@ export default function ChatWindow({ prolificId, initialSession }) {
   async function loadHistory() {
     try {
       const body = await fetchJson(`/api/v1/chat/session/${encodeURIComponent(prolificId)}`)
+      scrollModeRef.current = 'bottom'
       setChatHistory(body)
       showStatus('')
     } catch (err) {
@@ -51,7 +63,9 @@ export default function ChatWindow({ prolificId, initialSession }) {
     setStreamingMessage('')
     showStatus('Assistant is typing...')
     const clientMessageId = crypto.randomUUID()
-    // optimistically append user message to chat history first
+    exchangeStartIdxRef.current = (chatHistory.messages || []).length
+    setHasSentMessage(true)
+    scrollModeRef.current = 'top-user'
     setChatHistory((prev) => prev
       ? { ...prev, messages: [...(prev.messages || []), { role: 'user', content: text }] }
       : prev)
@@ -82,6 +96,11 @@ export default function ChatWindow({ prolificId, initialSession }) {
     }
   }
 
+  const allMessages = chatHistory?.messages || []
+  const prevMessages = hasSentMessage ? allMessages.slice(0, exchangeStartIdxRef.current) : allMessages
+  const exchangeMessages = hasSentMessage ? allMessages.slice(exchangeStartIdxRef.current) : []
+  const hasMessages = allMessages.length > 0 || streamingMessage !== null
+
   return (
     <section className="workspace">
       <div className="workspace-layout">
@@ -89,20 +108,39 @@ export default function ChatWindow({ prolificId, initialSession }) {
           <div className="section">
             {chatHistory ? `Topic: ${chatHistory.topic}` : 'No active chat session.'}
           </div>
-          <div className="messages" ref={messagesRef}>
-            {!chatHistory || !chatHistory.messages || chatHistory.messages.length === 0
-              ? <div>No messages yet.</div>
-              : chatHistory.messages.map((m, i) => (
-                <div key={i} className={`msg ${m.role}`}>
-                  <strong>{m.role}</strong><br />{m.content}
-                </div>
-              ))
+          <div className={`messages${hasMessages ? ' messages--active' : ''}`} ref={messagesRef}>
+            {!hasSentMessage
+              ? (!chatHistory || !allMessages.length
+                  ? <div>No messages yet.</div>
+                  : allMessages.map((m, i) => (
+                      <div key={i} className={`msg ${m.role}`}>
+                        <strong>{m.role}</strong><br />{m.content}
+                      </div>
+                    ))
+                )
+              : (
+                <>
+                  {prevMessages.map((m, i) => (
+                    <div key={i} className={`msg ${m.role}`}>
+                      <strong>{m.role}</strong><br />{m.content}
+                    </div>
+                  ))}
+                  <div className="current-exchange">
+                    {exchangeMessages.map((m, i) => (
+                      <div key={i} className={`msg ${m.role}`}>
+                        <strong>{m.role}</strong><br />{m.content}
+                      </div>
+                    ))}
+                    {streamingMessage !== null && (
+                      <div className="msg assistant streaming">
+                        <strong>assistant</strong><br />{streamingMessage}<span className="cursor">▌</span>
+                      </div>
+                    )}
+                    <div className="messages-spacer" />
+                  </div>
+                </>
+              )
             }
-            {streamingMessage !== null && (
-              <div className="msg assistant streaming">
-                <strong>assistant</strong><br />{streamingMessage}<span className="cursor">▌</span>
-              </div>
-            )}
           </div>
           <div className={`status${statusError ? ' error' : ''}`}>{status}</div>
           <MessageInput
