@@ -30,12 +30,6 @@ spec:
               value: {{ .Values.backend.env.databaseName | quote }}
             - name: ALLOWED_ORIGINS
               value: {{ .Values.backend.env.allowedOrigins | quote }}
-            - name: AZURE_OPENAI_ENDPOINT
-              value: {{ .Values.backend.env.azureOpenaiEndpoint | quote }}
-            - name: AZURE_OPENAI_API_KEY
-              value: {{ .Values.backend.env.azureOpenaiApiKey | quote }}
-            - name: AZURE_OPENAI_DEPLOYMENT
-              value: {{ .Values.backend.env.azureOpenaiDeployment | quote }}
           readinessProbe:
             httpGet:
               path: /readyz
