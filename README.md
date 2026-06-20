@@ -103,14 +103,22 @@ make kind-refresh-backend
 make kind-refresh-frontend
 ```
 
-After bootstrap, insert the LLM config into MongoDB (required for chat to work):
+### LLM Configuration (required for chat to work)
 
-Connect MongoDB Compass to:
-```text
-mongodb://mongouser:localdevpassword@localhost:27017/?authSource=admin
+The LLM endpoint, API key, and model are stored in MongoDB — not in environment variables. After bootstrap, insert the config into the `llm_config` collection:
+
+Via `mongosh`:
+```bash
+mongosh "mongodb://mongouser:localdevpassword@localhost:27017/persuasive_ai_study?authSource=admin" --eval '
+  db.llm_config.insertOne({
+    llm_model_endpoint: "https://lumen.ncsa.illinois.edu/v1",
+    llm_model_api_key: "<your-api-key>",
+    llm_model_deployment: "qwen3-coder-next",
+    updated_at: new Date()
+  })'
 ```
 
-Then insert the following document into `persuasive_ai_study` → `llm_config`:
+Or via MongoDB Compass, connect to `mongodb://mongouser:localdevpassword@localhost:27017/?authSource=admin` and insert into `persuasive_ai_study` → `llm_config`:
 
 ```json
 {
@@ -121,16 +129,7 @@ Then insert the following document into `persuasive_ai_study` → `llm_config`:
 }
 ```
 
-Or via `mongosh`:
-```bash
-mongosh "mongodb://mongouser:localdevpassword@localhost:27017/persuasive_ai_study?authSource=admin" --eval '
-  db.llm_config.insertOne({
-    llm_model_endpoint: "https://llm.ncsa.illinois.edu/v1",
-    llm_model_api_key: "<your-api-key>",
-    llm_model_deployment: "qwen3-coder-next",
-    updated_at: new Date()
-  })'
-```
+The config is cached in memory for 1 hour and reloaded automatically.
 
 Open app in browser:
 
@@ -195,9 +194,11 @@ Expected result:
 For setup, variables/secrets, and deploy steps, follow:
 - [Production Deployment Guide](k8s/overlays/production/README.md)
 
-CI/CD option:
-- GitHub Actions workflow: `.github/workflows/deploy-production.yml`
-- Expected GitHub vars/secrets are documented in `k8s/overlays/production/README.md`.
+CI/CD:
+- `.github/workflows/ci.yml` — runs unit tests on PRs and pushes to main
+- `.github/workflows/build-images-release-chart.yml` — builds Docker images and publishes the Helm chart on a new GitHub Release
+
+Required GitHub variables: `GHCR_BACKEND_IMAGE`, `GHCR_FRONTEND_IMAGE`
 
 ## Recommended Testing Tools
 - **Postman**
@@ -215,7 +216,7 @@ CI/CD option:
 ## Automated Unit Tests
 
 ```bash
-python3 -m unittest tests/test_api.py tests/test_chat_api.py
+python3 -m pytest tests/
 ```
 
 ## Useful Make Targets
