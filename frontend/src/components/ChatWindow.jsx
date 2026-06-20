@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchJson, fetchStream } from '../api'
 import MessageInput from './MessageInput'
+import MarkdownMessage from './MarkdownMessage'
 
 export default function ChatWindow({ prolificId, initialSession }) {
   const [chatHistory, setChatHistory] = useState(initialSession || null)
@@ -114,7 +115,10 @@ export default function ChatWindow({ prolificId, initialSession }) {
                   ? <div>No messages yet.</div>
                   : allMessages.map((m, i) => (
                       <div key={i} className={`msg ${m.role}`}>
-                        <strong>{m.role}</strong><br />{m.content}
+                        <strong>{m.role}</strong>
+                        {m.role === 'assistant'
+                          ? <MarkdownMessage content={m.content} />
+                          : <p>{m.content}</p>}
                       </div>
                     ))
                 )
@@ -128,12 +132,16 @@ export default function ChatWindow({ prolificId, initialSession }) {
                   <div className="current-exchange">
                     {exchangeMessages.map((m, i) => (
                       <div key={i} className={`msg ${m.role}`}>
-                        <strong>{m.role}</strong><br />{m.content}
+                        <strong>{m.role}</strong>
+                        {m.role === 'assistant'
+                          ? <MarkdownMessage content={m.content} />
+                          : <p>{m.content}</p>}
                       </div>
                     ))}
                     {streamingMessage !== null && (
                       <div className="msg assistant streaming">
-                        <strong>assistant</strong><br />{streamingMessage}<span className="cursor">▌</span>
+                        <strong>assistant</strong>
+                        <MarkdownMessage content={streamingMessage} /><span className="cursor">▌</span>
                       </div>
                     )}
                     <div className="messages-spacer" />
