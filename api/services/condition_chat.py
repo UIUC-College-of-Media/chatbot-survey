@@ -6,7 +6,6 @@ from typing import Literal
 
 from fastapi import HTTPException, status
 
-from api.services.llm import generate_chat_reply
 
 ConditionKey = Literal[
     "teams_personalized",
@@ -228,24 +227,3 @@ def clear_chat_session(session: ChatSession) -> ChatSession:
     return session
 
 
-async def append_and_generate(session: ChatSession, message: str) -> ChatSession:
-    now = datetime.now(UTC)
-    session.messages.append({"role": "user", "content": message, "created_at": now})
-
-    assistant_reply = await generate_chat_reply(
-        system_prompt=session.system_prompt,
-        messages=[
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in session.messages
-        ],
-    )
-
-    session.messages.append(
-        {
-            "role": "assistant",
-            "content": assistant_reply,
-            "created_at": datetime.now(UTC),
-        }
-    )
-    session.updated_at = datetime.now(UTC)
-    return session
