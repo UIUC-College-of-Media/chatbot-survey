@@ -9,7 +9,7 @@ backend:
     appEnv: development
     mongodbUrl: "mongodb://mongodb:27017"
     databaseName: persuasive_ai_study
-    allowedOrigins: "*"
+    allowedOrigins: "https://illinois.qualtrics.com"
     azureOpenaiEndpoint: ""
     azureOpenaiApiKey: ""
     azureOpenaiDeployment: ""
