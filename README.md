@@ -69,6 +69,7 @@ This runs:
 - local overlay deploy
 - rollout wait
 - sample Survey 1 seed request
+- MongoDB port-forward to localhost:27017 (background)
 
 Step-by-step (if you want manual control):
 
@@ -100,6 +101,35 @@ For one service only:
 ```bash
 make kind-refresh-backend
 make kind-refresh-frontend
+```
+
+After bootstrap, insert the LLM config into MongoDB (required for chat to work):
+
+Connect MongoDB Compass to:
+```text
+mongodb://mongouser:localdevpassword@localhost:27017/?authSource=admin
+```
+
+Then insert the following document into `persuasive_ai_study` → `llm_config`:
+
+```json
+{
+  "llm_model_endpoint": "https://llm.ncsa.illinois.edu/v1",
+  "llm_model_api_key": "<your-api-key>",
+  "llm_model_deployment": "qwen3-coder-next",
+  "updated_at": { "$date": "2026-01-01T00:00:00.000Z" }
+}
+```
+
+Or via `mongosh`:
+```bash
+mongosh "mongodb://mongouser:localdevpassword@localhost:27017/persuasive_ai_study?authSource=admin" --eval '
+  db.llm_config.insertOne({
+    llm_model_endpoint: "https://llm.ncsa.illinois.edu/v1",
+    llm_model_api_key: "<your-api-key>",
+    llm_model_deployment: "qwen3-coder-next",
+    updated_at: new Date()
+  })'
 ```
 
 Open app in browser:

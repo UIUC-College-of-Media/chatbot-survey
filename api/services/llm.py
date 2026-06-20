@@ -2,11 +2,11 @@ import asyncio
 from functools import lru_cache
 from typing import Any
 
-from api.config import get_settings
+from api.services.llm_config_cache import get_llm_config
 
 
-# One OpenAI client instance per process
-@lru_cache(maxsize=1)
+# One OpenAI client instance per (base_url, api_key) pair
+@lru_cache(maxsize=4)
 def _get_client(base_url: str, api_key: str) -> Any:
     from openai import OpenAI
 
@@ -27,25 +27,17 @@ def _create_completion(
 
 
 async def generate_chat_reply(
-    participant_id: str,
     system_prompt: str,
     messages: list[dict],
 ) -> str:
-    """Generate a chat reply using Azure OpenAI when configured, otherwise return a local mock reply."""
-    settings = get_settings()
-    endpoint = settings.azure_openai_endpoint.strip().rstrip("/")
-    api_key = settings.azure_openai_api_key.strip()
-    deployment = settings.azure_openai_deployment.strip()
+    """Generate a chat reply using the LLM config stored in the database."""
+    config = await get_llm_config()
+    endpoint = config.llm_model_endpoint.strip().rstrip("/")
+    api_key = config.llm_model_api_key.strip()
+    deployment = config.llm_model_deployment.strip()
 
-    if not endpoint or not api_key or not deployment:
-        if settings.app_env == "production":
-            raise RuntimeError("Azure OpenAI configuration is required in production")
-
-        latest_user_message = next(
-            (msg["content"] for msg in reversed(messages) if msg.get("role") == "user"),
-            "",
-        )
-        return f"[mock-reply for {participant_id}] You said: {latest_user_message}"
+    if not all([endpoint, api_key, deployment]):
+        raise RuntimeError("LLM config is incomplete")
 
     client = _get_client(endpoint, api_key)
 
@@ -53,10 +45,10 @@ async def generate_chat_reply(
         _create_completion, client, deployment, system_prompt, messages
     )
     if not completion.choices:
-        raise RuntimeError("Azure OpenAI returned no choices")
+        raise RuntimeError("LLM returned no choices")
 
     content = completion.choices[0].message.content or ""
     if not content:
-        raise RuntimeError("Azure OpenAI returned empty assistant content")
+        raise RuntimeError("LLM returned empty assistant content")
 
     return content
