@@ -27,9 +27,9 @@ spec:
             - name: ME_CONFIG_BASICAUTH_ENABLED
               value: {{ .Values.mongoExpress.basicAuth.enabled | toString | quote }}
             - name: ME_CONFIG_BASICAUTH_USERNAME
-              value: {{ .Values.mongoExpress.basicAuth.username | quote }}
+              value: {{ required "mongoExpress.basicAuth.username must be set" .Values.mongoExpress.basicAuth.username | quote }}
             - name: ME_CONFIG_BASICAUTH_PASSWORD
-              value: {{ .Values.mongoExpress.basicAuth.password | quote }}
+              value: {{ required "mongoExpress.basicAuth.password must be set" .Values.mongoExpress.basicAuth.password | quote }}
             - name: ME_CONFIG_SITE_SESSION_SECRET
               value: {{ .Values.mongoExpress.sessionSecret | quote }}
             - name: ME_CONFIG_SITE_COOKIESECRET
