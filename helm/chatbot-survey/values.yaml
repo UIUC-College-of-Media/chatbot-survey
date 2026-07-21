@@ -48,6 +48,6 @@ mongoExpress:
   sessionSecret: "changeme"
   cookieSecret: "changeme2"
   basicAuth:
-    enabled: false
+    enabled: true
     username: ""
     password: ""
