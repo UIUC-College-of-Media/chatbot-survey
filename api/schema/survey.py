@@ -10,11 +10,19 @@ class BlockStatementItem(BaseModel):
     statement_id: str = Field(
         ..., description="Identifier for the statement row (e.g., stmt1–stmt7)"
     )
+    statement_text: Optional[str] = Field(
+        None,
+        description="Text for the statement row (if available from Qualtrics piped text)",
+    )
     response: int = Field(
         ...,
         ge=1,
         le=6,
         description="Response value (1-6: completely disagree to completely agree)",
+    )
+    response_label: Optional[str] = Field(
+        None,
+        description="Human-readable label for response (same 6-point agree–disagree wording as the matrix)",
     )
 
 
@@ -34,6 +42,10 @@ class BlockResponses(BaseModel):
         ge=1,
         le=6,
         description="Opinion on the main statement (1-6: completely disagree to completely agree)",
+    )
+    opinion_label: Optional[str] = Field(
+        None,
+        description="Human-readable label for opinion (same 6-point agree–disagree scale)",
     )
     opinion_reason: Optional[str] = Field(
         None,
@@ -71,7 +83,47 @@ class Demographics(BaseModel):
         None, description="Do you have kids in school?"
     )
     political_belief: Optional[str] = Field(
-        None, description="Political belief on conservative-progressive scale"
+        None,
+        description=(
+            "Raw piped value from Qualtrics (may include ||QBipolarDelim|| between left and right pole labels)"
+        ),
+    )
+    political_belief_left_label: Optional[str] = Field(
+        None,
+        description="Left pole label when Qualtrics exports bipolar endpoints (split on ||QBipolarDelim||)",
+    )
+    political_belief_right_label: Optional[str] = Field(
+        None,
+        description="Right pole label when Qualtrics exports bipolar endpoints",
+    )
+    political_belief_display: Optional[str] = Field(
+        None,
+        description="Short display of both poles, e.g. 'Conservative — Progressive'",
+    )
+    political_belief_scale_position: Optional[int] = Field(
+        None,
+        ge=1,
+        le=6,
+        description="Selected position on the bipolar scale (1 toward left pole, 6 toward right); from SelectedAnswerRecode when available",
+    )
+    ai_chatbot_usage_frequency: Optional[str] = Field(
+        None,
+        description="How often participant uses AI chatbots (QID106, single-select)",
+    )
+    ai_chatbot_started_using: Optional[str] = Field(
+        None,
+        description="When participant first started using AI chatbots (QID107, single-select)",
+    )
+    chatbot_role_perception: Optional[List[str]] = Field(
+        None,
+        max_length=3,
+        description=(
+            "How participant thinks of chatbots they use (QID108, multi-select; up to 3 options)"
+        ),
+    )
+    chatbot_role_perception_other: Optional[str] = Field(
+        None,
+        description="Free-text response for 'chatbot as something else' (QID109)",
     )
 
 
